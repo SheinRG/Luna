@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="lunaGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b7a8ff"/>
+      <stop offset="1" stop-color="#7c6cf0"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#lunaGrad)" d="M42.8 8.2A26 26 0 1 0 55.8 41 21 21 0 0 1 42.8 8.2z"/>
+  <circle fill="#b7a8ff" opacity=".9" cx="46" cy="14" r="2.2"/>
+  <circle fill="#b7a8ff" opacity=".6" cx="54" cy="22" r="1.4"/>
+  <circle fill="#b7a8ff" opacity=".45" cx="50" cy="30" r="1"/>
+</svg>
