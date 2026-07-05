@@ -3,3 +3,4 @@
 - [entry 03] record CPU-only memory budget
 - [entry 04] jot down FastAPI stack decision
 - [entry 05] track SPEC.md as the contract
+- [entry 06] note build.ps1 packaging step
