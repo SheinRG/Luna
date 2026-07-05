@@ -7,3 +7,4 @@
 - [entry 07] add reminder about demo video
 - [entry 08] capture assets folder layout
 - [entry 09] note uv.lock dependency pinning
+- [entry 10] wrap up today's devlog notes
