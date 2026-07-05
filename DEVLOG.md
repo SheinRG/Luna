@@ -1,0 +1,1 @@
+- [entry 01] add devlog and initial entry
