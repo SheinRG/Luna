@@ -1,3 +1,4 @@
 - [entry 01] add devlog and initial entry
 - [entry 02] note llama3.2:3b as chosen model
 - [entry 03] record CPU-only memory budget
+- [entry 04] jot down FastAPI stack decision
