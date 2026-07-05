@@ -6,3 +6,4 @@
 - [entry 06] note build.ps1 packaging step
 - [entry 07] add reminder about demo video
 - [entry 08] capture assets folder layout
+- [entry 09] note uv.lock dependency pinning
