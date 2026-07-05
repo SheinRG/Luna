@@ -5,3 +5,4 @@
 - [entry 05] track SPEC.md as the contract
 - [entry 06] note build.ps1 packaging step
 - [entry 07] add reminder about demo video
+- [entry 08] capture assets folder layout
