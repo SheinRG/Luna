@@ -1,1 +1,2 @@
 - [entry 01] add devlog and initial entry
+- [entry 02] note llama3.2:3b as chosen model
