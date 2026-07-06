@@ -30,8 +30,12 @@ uv run pyinstaller `
     --clean `
     @iconArgs `
     --add-data "luna\ui;luna\ui" `
+    --collect-submodules uvicorn `
+    --collect-submodules anyio `
     --collect-all faster_whisper `
     --collect-all ctranslate2 `
+    --hidden-import "sniffio" `
+    --hidden-import "h11" `
     --hidden-import "winotify" `
     --hidden-import "sounddevice" `
     --hidden-import "pyttsx3.drivers" `

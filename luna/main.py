@@ -35,6 +35,24 @@ def _find_free_port() -> int:
         return sock.getsockname()[1]
 
 
+def _run_server(server: uvicorn.Server) -> None:
+    """Run uvicorn, persisting any startup crash to a log the packaged (no-console)
+    build would otherwise swallow."""
+    try:
+        server.run()
+    except Exception:
+        import traceback
+
+        try:
+            from luna.config import get_data_dir
+
+            (get_data_dir() / "luna_crash.log").write_text(
+                traceback.format_exc(), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
+
 def _wait_for_server(port: int, timeout: float = 15.0) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -126,7 +144,19 @@ def _open_window(url: str, title: str) -> None:
         pass
 
 
+def _ensure_std_streams() -> None:
+    """In a --noconsole PyInstaller build sys.stdout/stderr are None, which
+    breaks uvicorn's logging config and any print(). Point them at a sink."""
+    import sys
+
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")  # noqa: SIM115
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")  # noqa: SIM115
+
+
 def main() -> None:
+    _ensure_std_streams()
     init_db()
     conn = get_connection()
     row = conn.execute("SELECT value FROM settings WHERE key='assistant_name'").fetchone()
@@ -135,9 +165,9 @@ def main() -> None:
     port = _find_free_port()
     app = create_app()
     server = uvicorn.Server(
-        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", log_config=None)
     )
-    threading.Thread(target=server.run, daemon=True, name="luna-uvicorn").start()
+    threading.Thread(target=_run_server, args=(server,), daemon=True, name="luna-uvicorn").start()
 
     stop_reminders = threading.Event()
     threading.Thread(
