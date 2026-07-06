@@ -10,23 +10,28 @@ import { toast } from '../components/toast.js';
 import { renderShell } from '../components/shell.js';
 
 const TRASH_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+const CHECK_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg>';
+
+function dueDateLabel(d) {
+  return `${d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} at ${formatClockTime(d)}`;
+}
 
 export async function render(container, param) {
   const main = renderShell(container, 'tasks');
 
   let tab = ['reminders', 'todos', 'notes'].includes(param) ? param : 'reminders';
-  const tabBar = el('div', { class: 'tasks-tabs', role: 'tablist' });
+  const tabBar = el('div', { class: 'tab-bar', role: 'tablist' });
   const body = el('div', {});
 
   function renderTabs() {
     tabBar.innerHTML = '';
     for (const t of [
-      { id: 'reminders', label: '⏰ Reminders' },
-      { id: 'todos', label: '☑️ To-dos' },
-      { id: 'notes', label: '📝 Notes' },
+      { id: 'reminders', label: 'Reminders' },
+      { id: 'todos', label: 'To-dos' },
+      { id: 'notes', label: 'Notes' },
     ]) {
       tabBar.appendChild(el('button', {
-        class: `task-tab${tab === t.id ? ' active' : ''}`, role: 'tab',
+        class: `text-tab${tab === t.id ? ' active' : ''}`, role: 'tab',
         'aria-selected': tab === t.id ? 'true' : 'false',
         onClick: () => { tab = t.id; renderTabs(); renderBody(); },
       }, t.label));
@@ -47,10 +52,10 @@ export async function render(container, param) {
 
     const textInput = el('input', {
       class: 'text-input', type: 'text',
-      placeholder: 'What should Luna remind you about?', 'aria-label': 'Reminder text',
+      placeholder: 'Remind me to… (e.g. stretch)', 'aria-label': 'Reminder text',
     });
     const whenInput = el('input', {
-      class: 'text-input', type: 'text', style: 'max-width:220px',
+      class: 'text-input when-input', type: 'text',
       placeholder: 'tomorrow at 9', 'aria-label': 'When (natural language)',
     });
     const dtFallback = el('input', {
@@ -61,6 +66,7 @@ export async function render(container, param) {
 
     whenInput.addEventListener('input', () => {
       const parsed = parseNaturalDueTime(whenInput.value);
+      duePreview.classList.remove('unparsed');
       if (parsed) {
         duePreview.textContent = `→ ${parsed.toLocaleString(undefined, {
           weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
@@ -68,6 +74,7 @@ export async function render(container, param) {
         dtFallback.classList.add('hidden');
       } else if (whenInput.value.trim()) {
         duePreview.textContent = 'Couldn’t parse that — pick a time below instead';
+        duePreview.classList.add('unparsed');
         dtFallback.classList.remove('hidden');
         if (!dtFallback.value) dtFallback.value = formatDateTimeLocalValue(new Date(Date.now() + 3600e3));
       } else {
@@ -84,6 +91,7 @@ export async function render(container, param) {
       if (!due && dtFallback.value) due = new Date(dtFallback.value);
       if (!due || Number.isNaN(due.getTime())) {
         duePreview.textContent = 'When should this fire? Try "tomorrow at 9" or use the picker.';
+        duePreview.classList.add('unparsed');
         dtFallback.classList.remove('hidden');
         whenInput.focus();
         return;
@@ -93,7 +101,7 @@ export async function render(container, param) {
         await api.createReminder(text, due.toISOString());
         textInput.value = ''; whenInput.value = ''; dtFallback.value = '';
         duePreview.textContent = '';
-        toast('Reminder set — Luna will toast you 🔔', 'success');
+        toast('Reminder set — Luna will toast you', 'success');
         await renderReminders();
       } catch (err) {
         toast(`Couldn’t set reminder: ${err.message}`, 'error');
@@ -104,11 +112,11 @@ export async function render(container, param) {
     textInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') whenInput.focus(); });
     whenInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
 
-    body.appendChild(el('div', { class: 'task-add-form' }, [textInput, whenInput, addBtn]));
+    body.appendChild(el('div', { class: 'add-row' }, [textInput, whenInput, addBtn]));
     body.appendChild(duePreview);
     body.appendChild(dtFallback);
 
-    const list = el('div', { class: 'list-stack', style: 'margin-top:16px' });
+    const list = el('div', { class: 'hair-list' });
     body.appendChild(list);
     try {
       const res = await api.listReminders();
@@ -125,14 +133,20 @@ export async function render(container, param) {
         const due = r.due_at ? new Date(r.due_at) : null;
         const fired = r.fired === 1 || r.fired === true || r.fired === '1';
         const overdue = due && !fired && due < new Date();
-        list.appendChild(el('div', { class: `row-card${fired ? ' done' : ''}` }, [
-          el('div', { class: 'row-body' }, [
-            el('div', { class: 'row-title' }, r.text || ''),
-            el('div', { class: 'row-meta' }, [
-              due && el('span', { class: overdue ? 'reminder-overdue' : '' },
-                `${overdue ? '⚠ overdue — ' : ''}${due.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} at ${formatClockTime(due)}`),
-              fired && el('span', { class: 'chip chip-neutral' }, 'delivered'),
-            ]),
+
+        let dueLine = null;
+        if (due) {
+          if (fired) dueLine = el('div', { class: 'hair-meta' }, `Delivered — ${dueDateLabel(due)}`);
+          else if (overdue) dueLine = el('div', { class: 'hair-meta' }, [
+            el('span', { class: 'due-overdue' }, `Overdue — ${dueDateLabel(due)}`),
+          ]);
+          else dueLine = el('div', { class: 'hair-meta' }, dueDateLabel(due));
+        }
+
+        list.appendChild(el('div', { class: `hair-row${fired ? ' done' : ''}` }, [
+          el('div', { class: 'hair-body' }, [
+            el('div', { class: 'hair-title' }, r.text || ''),
+            dueLine,
           ]),
           el('div', { class: 'row-actions' }, [
             el('button', {
@@ -172,9 +186,9 @@ export async function render(container, param) {
       }
     }
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
-    body.appendChild(el('div', { class: 'task-add-form' }, [input, addBtn]));
+    body.appendChild(el('div', { class: 'add-row' }, [input, addBtn]));
 
-    const list = el('div', { class: 'list-stack' });
+    const list = el('div', { class: 'hair-list' });
     body.appendChild(list);
     try {
       const res = await api.listTodos();
@@ -191,15 +205,15 @@ export async function render(container, param) {
         const done = t.done === 1 || t.done === true || t.done === '1';
         const checkbox = el('input', { type: 'checkbox' });
         checkbox.checked = done;
-        const row = el('div', { class: `row-card${done ? ' done' : ''}` }, [
+        const row = el('div', { class: `hair-row${done ? ' done' : ''}` }, [
           el('label', { class: 'check' }, [
             checkbox,
-            el('span', { class: 'box', html: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg>' }),
+            el('span', { class: 'box', html: CHECK_ICON }),
           ]),
-          el('div', { class: 'row-body' }, [
-            el('div', { class: 'row-title' }, t.item || ''),
+          el('div', { class: 'hair-body' }, [
+            el('div', { class: 'hair-title' }, t.item || ''),
             t.list_name && t.list_name !== 'default' &&
-              el('div', { class: 'row-meta' }, [el('span', { class: 'chip chip-neutral' }, t.list_name)]),
+              el('div', { class: 'hair-meta' }, t.list_name),
           ]),
           el('div', { class: 'row-actions' }, [
             el('button', {
@@ -232,7 +246,7 @@ export async function render(container, param) {
   async function renderNotes() {
     body.innerHTML = '';
     const titleInput = el('input', {
-      class: 'text-input', type: 'text', placeholder: 'Note title…', 'aria-label': 'Note title',
+      class: 'text-input', type: 'text', placeholder: 'New note title…', 'aria-label': 'Note title',
     });
     const addBtn = el('button', { class: 'btn btn-primary', onClick: add }, 'Create note');
     async function add() {
@@ -251,9 +265,9 @@ export async function render(container, param) {
       }
     }
     titleInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
-    body.appendChild(el('div', { class: 'task-add-form' }, [titleInput, addBtn]));
+    body.appendChild(el('div', { class: 'add-row' }, [titleInput, addBtn]));
 
-    const list = el('div', { class: 'list-stack' });
+    const list = el('div', { class: 'hair-list' });
     body.appendChild(list);
     try {
       const res = await api.listNotes();
@@ -267,15 +281,15 @@ export async function render(container, param) {
         return;
       }
       for (const n of notes) {
-        list.appendChild(el('div', { class: 'row-card' }, [
-          el('div', { class: 'row-body' }, [
-            el('div', { class: 'row-title' }, n.title || 'Untitled note'),
-            el('div', { class: 'row-meta' }, [
-              n.path && el('span', { title: n.path, style: 'font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;max-width:340px;white-space:nowrap;' }, n.path),
-              n.created_at && el('span', {}, formatRelativeTime(n.created_at)),
+        list.appendChild(el('div', { class: 'hair-row' }, [
+          el('div', { class: 'hair-body' }, [
+            el('div', { class: 'hair-title' }, n.title || 'Untitled note'),
+            n.path && el('div', { class: 'hair-meta' }, [
+              el('span', { class: 'note-path', title: n.path }, n.path),
             ]),
           ]),
           el('div', { class: 'row-actions' }, [
+            n.created_at && el('span', { class: 'activity-time' }, formatRelativeTime(n.created_at)),
             el('button', {
               class: 'icon-btn', title: 'Delete', 'aria-label': 'Delete note', html: TRASH_ICON,
               onClick: async () => {
@@ -300,11 +314,9 @@ export async function render(container, param) {
   main.appendChild(el('div', { class: 'page' }, [
     el('div', { class: 'page-inner' }, [
       el('div', { class: 'page-header' }, [
-        el('div', {}, [
-          el('h2', {}, 'Tasks'),
-          el('p', { class: 'page-sub' },
-            'Reminders fire as Windows toasts even while you’re in another app. All of it also works by just asking Luna in chat.'),
-        ]),
+        el('h2', { class: 'page-title' }, 'Tasks'),
+        el('p', { class: 'page-sub' },
+          'Reminders arrive as Windows toasts — or just ask Luna in chat.'),
       ]),
       tabBar,
       body,

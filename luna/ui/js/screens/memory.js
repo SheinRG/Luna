@@ -1,6 +1,6 @@
 // luna/ui/js/screens/memory.js
-// Memory manager: list with category chips + filter, add / inline-edit /
-// delete / delete-all. GET/POST/PUT/DELETE /api/memories.
+// Memory manager: hairline list with category dots + text-tab filter, add /
+// inline-edit / delete / forget-all. GET/POST/PUT/DELETE /api/memories.
 
 import { el, formatRelativeTime } from '../util.js';
 import { api } from '../api.js';
@@ -8,12 +8,15 @@ import { toast } from '../components/toast.js';
 import { confirmDialog } from '../components/modal.js';
 import { renderShell } from '../components/shell.js';
 
+// Filter tabs (REDESIGN): all preference fact app style.
+const FILTERS = ['all', 'preference', 'fact', 'app', 'style'];
 const CATEGORIES = ['preference', 'fact', 'app', 'style', 'other'];
-const CATEGORY_CHIP = {
-  preference: 'chip', fact: 'chip-info', app: 'chip-success', style: 'chip-warning',
-  other: 'chip-neutral',
+const SOURCE_LABEL = {
+  explicit: 'you told Luna', extracted: 'learned from chat', manual: 'added here',
 };
-const SOURCE_LABEL = { explicit: 'you told Luna', extracted: 'learned from chat', manual: 'added here' };
+
+const EDIT_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>';
+const TRASH_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
 
 export async function render(container) {
   const main = renderShell(container, 'memory');
@@ -21,38 +24,37 @@ export async function render(container) {
   let memories = [];
   let filter = 'all';
 
-  const listEl = el('div', { class: 'list-stack' });
-  const filterBar = el('div', { class: 'memory-filters' });
+  const listEl = el('div', { class: 'hair-list' });
+  const filterBar = el('div', { class: 'text-tabs' });
 
-  /* ---- add form ---- */
+  /* ---- add ---- */
   const addInput = el('input', {
     class: 'text-input', type: 'text',
-    placeholder: 'e.g. I prefer short, to-the-point answers',
+    placeholder: 'Add something Luna should remember…',
     'aria-label': 'New memory text',
   });
-  const addCategory = el('select', { class: 'select-input', 'aria-label': 'Category' },
-    CATEGORIES.map((c) => el('option', { value: c }, c)));
-  const addBtn = el('button', { class: 'btn btn-primary', onClick: addMemory }, 'Remember');
   addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addMemory(); });
 
   async function addMemory() {
     const text = addInput.value.trim();
     if (!text) { addInput.focus(); return; }
-    addBtn.disabled = true;
+    addInput.disabled = true;
     try {
-      await api.createMemory(text, addCategory.value);
+      await api.createMemory(text); // category defaults to 'other' (manual)
       addInput.value = '';
       toast('Memory saved', 'success');
       await load();
     } catch (err) {
       toast(`Couldn’t save: ${err.message}`, 'error');
     } finally {
-      addBtn.disabled = false;
+      addInput.disabled = false;
+      addInput.focus();
     }
   }
 
-  const deleteAllBtn = el('button', {
-    class: 'btn btn-danger',
+  /* ---- forget everything ---- */
+  const forgetBtn = el('button', {
+    class: 'text-btn danger',
     onClick: async () => {
       if (!memories.length) return;
       const ok = await confirmDialog({
@@ -69,18 +71,16 @@ export async function render(container) {
         toast(`Couldn’t delete: ${err.message}`, 'error');
       }
     },
-  }, 'Delete all');
+  }, 'Forget everything');
 
   /* ---- filters ---- */
   function renderFilters() {
     filterBar.innerHTML = '';
-    const counts = { all: memories.length };
-    for (const c of CATEGORIES) counts[c] = memories.filter((m) => m.category === c).length;
-    for (const f of ['all', ...CATEGORIES]) {
+    for (const f of FILTERS) {
       filterBar.appendChild(el('button', {
-        class: `filter-chip${filter === f ? ' active' : ''}`,
+        class: `text-tab${filter === f ? ' active' : ''}`,
         onClick: () => { filter = f; renderFilters(); renderList(); },
-      }, `${f}${counts[f] ? ` · ${counts[f]}` : ''}`));
+      }, f.charAt(0).toUpperCase() + f.slice(1)));
     }
   }
 
@@ -90,37 +90,41 @@ export async function render(container) {
     const shown = filter === 'all' ? memories : memories.filter((m) => m.category === filter);
     if (!shown.length) {
       listEl.appendChild(el('div', { class: 'empty-state' }, [
-        el('div', { class: 'empty-icon' }, '🧠'),
+        el('div', { class: 'empty-icon' }, '🌙'),
         el('h4', {}, memories.length ? 'Nothing in this category' : 'Luna hasn’t remembered anything yet'),
         el('p', {}, memories.length
           ? 'Try another filter, or add a memory above.'
-          : 'Chat naturally — Luna picks up preferences and facts as you go. Or add one manually above.'),
+          : 'Chat naturally — Luna picks up preferences and facts as you go. Or add one above.'),
       ]));
       return;
     }
     for (const m of shown) listEl.appendChild(memoryRow(m));
   }
 
+  function metaText(m) {
+    const parts = [];
+    if (m.source && SOURCE_LABEL[m.source]) parts.push(SOURCE_LABEL[m.source]);
+    else if (m.source) parts.push(m.source);
+    if (m.created_at) parts.push(formatRelativeTime(m.created_at));
+    return parts.join(' · ');
+  }
+
   function memoryRow(m) {
-    const title = el('div', { class: 'row-title' }, m.text || '');
-    const row = el('div', { class: 'row-card' }, [
-      el('div', { class: 'row-body' }, [
+    const cat = CATEGORIES.includes(m.category) ? m.category : 'other';
+    const title = el('div', { class: 'hair-title' }, m.text || '');
+    const row = el('div', { class: 'hair-row' }, [
+      el('span', { class: `cat-dot ${cat}`, title: cat }),
+      el('div', { class: 'hair-body' }, [
         title,
-        el('div', { class: 'row-meta' }, [
-          el('span', { class: `chip ${CATEGORY_CHIP[m.category] || 'chip-neutral'}` }, m.category || 'other'),
-          m.source && el('span', {}, SOURCE_LABEL[m.source] || m.source),
-          m.created_at && el('span', {}, formatRelativeTime(m.created_at)),
-        ]),
+        el('div', { class: 'hair-meta' }, metaText(m)),
       ]),
       el('div', { class: 'row-actions' }, [
         el('button', {
-          class: 'icon-btn', title: 'Edit', 'aria-label': 'Edit memory',
-          html: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>',
+          class: 'icon-btn', title: 'Edit', 'aria-label': 'Edit memory', html: EDIT_ICON,
           onClick: () => startEdit(m, row, title),
         }),
         el('button', {
-          class: 'icon-btn', title: 'Delete', 'aria-label': 'Delete memory',
-          html: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+          class: 'icon-btn', title: 'Delete', 'aria-label': 'Delete memory', html: TRASH_ICON,
           onClick: async () => {
             try {
               await api.deleteMemory(m.id);
@@ -155,13 +159,11 @@ export async function render(container) {
           toast(`Couldn’t update: ${err.message}`, 'error');
         }
       }
-      const fresh = el('div', { class: 'row-title' }, m.text || '');
+      const fresh = el('div', { class: 'hair-title' }, m.text || '');
       editor.replaceWith(fresh);
-      // re-arm edit button target
       row.querySelector('.row-actions .icon-btn')?.replaceWith(
         el('button', {
-          class: 'icon-btn', title: 'Edit', 'aria-label': 'Edit memory',
-          html: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>',
+          class: 'icon-btn', title: 'Edit', 'aria-label': 'Edit memory', html: EDIT_ICON,
           onClick: () => startEdit(m, row, fresh),
         })
       );
@@ -196,14 +198,14 @@ export async function render(container) {
   main.appendChild(el('div', { class: 'page' }, [
     el('div', { class: 'page-inner' }, [
       el('div', { class: 'page-header' }, [
-        el('div', {}, [
-          el('h2', {}, 'Memory'),
-          el('p', { class: 'page-sub' },
-            'Everything Luna knows about you lives here — on this device only. Review it, correct it, or wipe it any time.'),
+        el('div', { class: 'page-head-row' }, [
+          el('h2', { class: 'page-title' }, 'Memory'),
+          forgetBtn,
         ]),
-        el('div', { class: 'page-actions' }, [deleteAllBtn]),
+        el('p', { class: 'page-sub' },
+          'What Luna knows about you — stored on this device only.'),
       ]),
-      el('div', { class: 'memory-add-form' }, [addInput, addCategory, addBtn]),
+      el('div', { class: 'add-row' }, [addInput]),
       filterBar,
       listEl,
     ]),

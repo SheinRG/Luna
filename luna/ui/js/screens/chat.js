@@ -1,7 +1,7 @@
 // luna/ui/js/screens/chat.js
 // The main chat experience: hero empty-state, streaming markdown messages,
 // action proposal/result cards, attachments (picker + drag-drop), voice
-// in/out, stop generation, thinking indicator.
+// in/out, stop generation, thinking indicator, recent-chats footer.
 //
 // SSE events consumed (names exactly per SPEC §6):
 //   meta, token, action_proposal, action_result, memory_saved, done, error
@@ -9,34 +9,31 @@
 import { el, timeOfDayGreeting, formatClockTime, uid } from '../util.js';
 import { api } from '../api.js';
 import {
-  state, userName, assistantName, truthy, getSetting, voiceAvailable,
+  state, userName, assistantName, truthy, voiceAvailable,
 } from '../state.js';
 import { renderMarkdownInto } from '../markdown.js';
 import { toast } from '../components/toast.js';
-import { renderShell, refreshConversations, highlightActiveConversation } from '../components/shell.js';
+import {
+  renderShell, refreshConversations, highlightActiveConversation, renderRecentInto, moonSvg,
+} from '../components/shell.js';
 
 const EXAMPLE_PROMPTS = [
-  { emoji: '🗂️', text: 'Organize my Downloads folder' },
-  { emoji: '🔎', text: 'Find my resume' },
-  { emoji: '⏰', text: 'Remind me tomorrow at 9 to stretch' },
-  { emoji: '📄', text: 'Summarize a PDF for me' },
+  'Organize my Downloads folder',
+  'Find my resume',
+  'Remind me tomorrow at 9 to stretch',
+  'Summarize a PDF for me',
 ];
 
 const ICONS = {
-  send: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>',
-  stop: '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+  send: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>',
+  stop: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
   paperclip: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',
   mic: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>',
   speaker: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>',
   copy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   file: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><path d="M14 2v6h6"/></svg>',
   arrowDown: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>',
-};
-
-const ACTION_ICONS = {
-  open_app: '🚀', search_files: '🔎', summarize_document: '📄', create_note: '📝',
-  draft_email: '✉️', set_reminder: '⏰', create_todo: '☑️', organize_downloads: '🗂️',
-  remember: '🧠', default: '✨',
+  arrowRight: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>',
 };
 
 export async function render(container, param) {
@@ -47,63 +44,43 @@ export async function render(container, param) {
   /* ================= local screen state ================= */
   let streaming = false;
   let abortController = null;
-  let currentAssistant = null; // {root, cardsEl, bubble, contentEl, buffer, gotToken, footer}
+  let currentAssistant = null; // {root, cardsEl, bubble, contentEl, buffer, gotToken, footer, body}
   let renderQueued = false;
   let doneReceived = false;
   let composerAtts = []; // {localId, name, kind, attachmentId, status, objectUrl}
   let recording = false;
   let speakingUtterance = null;
 
-  /* ================= DOM ================= */
+  /* ================= top bar ================= */
   const chatTitle = el('div', { class: 'chat-title' }, 'New chat');
-  const modelChip = el('span', { class: 'chip chip-neutral model-chip' },
-    state.health?.active_model || 'local model');
 
-  const autoSpeakInput = el('input', { type: 'checkbox' });
-  autoSpeakInput.checked = truthy(getSetting('auto_speak'));
-  autoSpeakInput.addEventListener('change', async () => {
-    try {
-      await api.putSettings({ auto_speak: autoSpeakInput.checked });
-      state.settings.auto_speak = autoSpeakInput.checked;
-    } catch (_err) {
-      state.settings.auto_speak = autoSpeakInput.checked; // still honor locally
-    }
-  });
-
-  const header = el('div', { class: 'chat-header' }, [
-    chatTitle,
-    modelChip,
-    el('label', { class: 'autospeak-label', title: 'Read every reply aloud automatically' }, [
-      el('span', {}, '🔊 Auto-speak'),
-      el('span', { class: 'switch' }, [
-        autoSpeakInput,
-        el('span', { class: 'track' }),
-        el('span', { class: 'thumb' }),
-      ]),
-    ]),
+  const model = state.health?.active_model || 'llama3.2:3b';
+  const ollamaBad = !!(state.health && state.health.ollama && state.health.ollama !== 'ok');
+  const statusEl = el('div', { class: 'chat-status' }, [
+    el('span', { class: `status-dot${ollamaBad ? ' danger' : ''}` }),
+    el('span', {}, ollamaBad ? 'offline' : `${model} · local`),
   ]);
 
-  /* ---- hero (empty chat) ---- */
+  const topbar = el('div', { class: 'chat-topbar' }, [chatTitle, statusEl]);
+
+  /* ================= hero (empty chat) ================= */
   const hero = el('div', { class: 'chat-hero' }, [
-    el('div', { class: 'hero-moon', html:
-      `<svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-        <defs><linearGradient id="herograd" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#b7a8ff"/><stop offset="1" stop-color="#7c6cf0"/>
-        </linearGradient></defs>
-        <path fill="url(#herograd)" d="M42.8 8.2A26 26 0 1 0 55.8 41 21 21 0 0 1 42.8 8.2z"/>
-      </svg>` }),
+    el('div', { class: 'hero-moon', html: moonSvg(40) }),
     el('h1', { class: 'hero-greeting' },
-      `${timeOfDayGreeting()}${userName() ? `, ${userName()}` : ''} 🌙`),
-    el('p', { class: 'hero-sub' }, 'What can I do for you?'),
-    el('div', { class: 'hero-chips' }, EXAMPLE_PROMPTS.map((p) =>
-      el('button', { class: 'hero-chip', onClick: () => {
-        input.value = p.text;
-        input.focus();
-        autoGrow();
-        sendMessage();
-      } }, [
-        el('span', { class: 'chip-emoji', 'aria-hidden': 'true' }, p.emoji),
-        el('span', {}, p.text),
+      `${timeOfDayGreeting()}${userName() ? `, ${userName()}` : ''}`),
+    el('p', { class: 'hero-sub' }, 'Everything stays on this device.'),
+    el('div', { class: 'hero-prompts' }, EXAMPLE_PROMPTS.map((text) =>
+      el('button', {
+        class: 'hero-prompt',
+        onClick: () => {
+          input.value = text;
+          input.focus();
+          autoGrow();
+          sendMessage();
+        },
+      }, [
+        el('span', {}, text),
+        el('span', { class: 'hero-arrow', html: ICONS.arrowRight }),
       ])
     )),
   ]);
@@ -115,11 +92,11 @@ export async function render(container, param) {
     el('span', { html: ICONS.arrowDown }), 'Jump to latest',
   ]);
 
-  /* ---- composer ---- */
+  /* ================= composer ================= */
   const attachmentsBar = el('div', { class: 'composer-attachments' });
   const input = el('textarea', {
     class: 'composer-input',
-    placeholder: `Message ${assistantName()}…`,
+    placeholder: 'Ask Luna anything…',
     rows: '1',
     'aria-label': 'Message input',
   });
@@ -134,13 +111,13 @@ export async function render(container, param) {
   });
 
   const attachBtn = el('button', {
-    class: 'icon-btn', title: 'Attach a file (txt, md, pdf, image)',
+    class: 'icon-btn composer-attach', title: 'Attach a file (txt, md, pdf, image)',
     'aria-label': 'Attach file', html: ICONS.paperclip,
     onClick: () => fileInput.click(),
   });
 
   const micBtn = el('button', {
-    class: 'icon-btn', title: 'Voice input — click to start, click again to stop',
+    class: 'icon-btn composer-mic', title: 'Voice input — click to start, click again to stop',
     'aria-label': 'Voice input', html: ICONS.mic,
     onClick: toggleRecording,
   });
@@ -156,22 +133,32 @@ export async function render(container, param) {
     el('span', { class: 'composer-hint' }, 'Enter to send · Shift+Enter for a new line · Esc to stop'),
   ]);
 
-  const composer = el('div', { class: 'composer' }, [
-    attachmentsBar,
-    el('div', { class: 'composer-row' }, [attachBtn, fileInput, input, micBtn, sendBtn]),
+  const composer = el('div', { class: 'composer' }, [attachBtn, fileInput, input, micBtn, sendBtn]);
+
+  /* ---- recent chats footer (replaces sidebar history) ---- */
+  const recentList = el('div', { class: 'recent-list', id: 'recent-list' });
+  const recentFooter = el('div', { class: 'recent-footer hidden' }, [
+    el('div', { class: 'recent-label' }, 'Recent'),
+    recentList,
   ]);
 
-  const composerWrap = el('div', { class: 'composer-wrap' }, [composer, statusLine]);
+  const composerWrap = el('div', { class: 'composer-wrap' }, [
+    attachmentsBar, composer, statusLine, recentFooter,
+  ]);
 
   const screen = el('div', { class: 'chat-screen' }, [
-    header, hero, scroller, scrollBtn, composerWrap,
+    topbar, hero, scroller, scrollBtn, composerWrap,
   ]);
   main.appendChild(screen);
+
+  // Populate the recent footer from whatever we already have, then refresh.
+  renderRecentInto(recentList);
+  refreshConversations();
 
   /* ================= composer behavior ================= */
   function autoGrow() {
     input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 200) + 'px';
+    input.style.height = Math.min(input.scrollHeight, 180) + 'px';
   }
   input.addEventListener('input', autoGrow);
   input.addEventListener('keydown', (e) => {
@@ -231,6 +218,10 @@ export async function render(container, param) {
         att.name = res?.name || att.name;
         att.status = att.attachmentId != null ? 'ok' : 'error';
         if (att.status === 'error') toast(`Upload of ${att.name} returned no id`, 'error');
+        // §7.3 image-upload notice — restyled as a friendly info toast.
+        if (att.kind === 'image' && att.status === 'ok') {
+          toast('Image attached — Luna runs a fast text-only model, so she’ll work from the file name and details.', 'info', 5200);
+        }
         renderComposerAtts();
       }).catch((err) => {
         composerAtts = composerAtts.filter((a) => a.localId !== localId);
@@ -272,7 +263,7 @@ export async function render(container, param) {
         recording = true;
         micBtn.classList.add('recording');
         micBtn.title = 'Recording… click to stop';
-        setStatus('recording', '🎙️ Listening… click the mic again to stop');
+        setStatus('recording', 'Listening… click the mic again to stop');
       } catch (err) {
         toast(`Voice input unavailable: ${err.message}`, 'error');
         micBtn.classList.add('hidden'); // §7.3: degrade, never crash
@@ -369,13 +360,11 @@ export async function render(container, param) {
         ))
       : null;
 
-    const initial = (userName() || 'You').trim().charAt(0).toUpperCase() || 'Y';
     messagesEl.appendChild(
       el('div', { class: 'msg msg-user' }, [
-        el('div', { class: 'msg-avatar' }, initial),
         el('div', { class: 'msg-body' }, [
           attEls,
-          el('div', { class: 'msg-bubble' }, text),
+          el('div', { class: 'user-bubble' }, text),
           el('div', { class: 'msg-footer' }, [
             el('span', { class: 'msg-time' }, formatClockTime(new Date())),
           ]),
@@ -385,23 +374,24 @@ export async function render(container, param) {
     scrollToBottom(true);
   }
 
+  function thinkingIndicator() {
+    return el('div', { class: 'thinking', 'aria-label': `${assistantName()} is thinking` }, [
+      el('span', { class: 'thinking-moon', html: moonSvg(15) }),
+      el('span', { class: 'thinking-label' }, 'thinking…'),
+    ]);
+  }
+
   function newAssistantMessage() {
     showConversationUI();
     const cardsEl = el('div', { class: 'assistant-cards', style: 'display:flex;flex-direction:column;gap:10px;' });
     const contentEl = el('div', { class: 'md-content' });
-    const bubble = el('div', { class: 'msg-bubble streaming' }, [
-      el('div', { class: 'thinking-dots', 'aria-label': `${assistantName()} is thinking` }, [
-        el('span'), el('span'), el('span'),
-        el('span', { class: 'thinking-label' }, `${assistantName()} is thinking…`),
-      ]),
+    const bubble = el('div', { class: 'msg-text streaming' }, [
+      thinkingIndicator(),
       contentEl,
     ]);
     const footer = el('div', { class: 'msg-footer' });
     const body = el('div', { class: 'msg-body' }, [cardsEl, bubble, footer]);
-    const root = el('div', { class: 'msg msg-assistant' }, [
-      el('div', { class: 'msg-avatar' }, '🌙'),
-      body,
-    ]);
+    const root = el('div', { class: 'msg msg-assistant' }, [body]);
     messagesEl.appendChild(root);
     scrollToBottom(true);
     return {
@@ -426,10 +416,10 @@ export async function render(container, param) {
     if (!currentAssistant) return;
     const a = currentAssistant;
     a.bubble.classList.remove('streaming');
-    a.bubble.querySelector('.thinking-dots')?.remove();
+    a.bubble.querySelector('.thinking')?.remove();
 
     if (error) {
-      a.bubble.classList.add('error-bubble');
+      a.contentEl.classList.add('error-text');
       a.contentEl.textContent = error;
     } else {
       renderMarkdownInto(a.contentEl, a.buffer); // final, fully-highlighted pass
@@ -437,11 +427,10 @@ export async function render(container, param) {
         a.footer.appendChild(el('span', { class: 'msg-time' }, '· stopped'));
       }
       if (!a.buffer && !a.actionCards.size && !error) {
-        // stream ended with no content at all
         a.contentEl.textContent = interrupted
           ? '(stopped before replying)'
           : '(no response — connection closed early)';
-        a.contentEl.style.color = 'var(--text-tertiary)';
+        a.contentEl.style.color = 'var(--tx3)';
       }
     }
 
@@ -476,9 +465,9 @@ export async function render(container, param) {
     const {
       action_id, intent, label, params, preview, needs_permission, permission_category,
     } = data || {};
-    const icon = ACTION_ICONS[intent] || ACTION_ICONS.default;
 
-    const statusChip = el('span', { class: 'chip chip-info action-card-status' }, 'Awaiting approval');
+    const dot = el('span', { class: 'action-dot pending' });
+    const statusText = el('span', { class: 'action-card-status' }, 'needs approval');
     const resultEl = el('div', { class: 'action-card-result hidden' });
 
     let previewText = '';
@@ -496,41 +485,35 @@ export async function render(container, param) {
 
     const card = el('div', { class: 'action-card', dataset: { actionId: String(action_id) } }, [
       el('div', { class: 'action-card-head' }, [
-        el('span', { class: 'action-card-icon', 'aria-hidden': 'true' }, icon),
-        el('div', { class: 'action-card-titles' }, [
-          el('div', { class: 'action-card-label' }, label || intent || 'Proposed action'),
-          intent && el('div', { class: 'action-card-intent' }, intent),
-        ]),
-        statusChip,
+        dot,
+        el('span', { class: 'action-card-label' }, label || intent || 'Proposed action'),
+        statusText,
       ]),
       previewText && el('div', { class: 'action-card-preview' }, previewText),
       needs_permission && el('div', { class: 'action-card-permission-note' },
-        `⚠ Needs the “${permission_category || 'general'}” permission`),
+        `Needs the “${permission_category || 'general'}” permission`),
       actionsRow,
       resultEl,
     ]);
 
+    const setDot = (cls) => { dot.className = `action-dot ${cls}`; };
+
     const setState = (name, detail = '') => {
-      card.classList.remove('state-executing', 'state-ok', 'state-error', 'state-denied');
       if (name === 'executing') {
-        card.classList.add('state-executing');
-        statusChip.className = 'chip action-card-status';
-        statusChip.textContent = 'Running…';
+        setDot('pending');
+        statusText.textContent = 'running…';
         actionsRow.classList.add('hidden');
       } else if (name === 'ok') {
-        card.classList.add('state-ok');
-        statusChip.className = 'chip chip-success action-card-status';
-        statusChip.textContent = 'Done';
+        setDot('ok');
+        statusText.textContent = 'done';
         actionsRow.classList.add('hidden');
       } else if (name === 'error') {
-        card.classList.add('state-error');
-        statusChip.className = 'chip chip-danger action-card-status';
-        statusChip.textContent = 'Failed';
+        setDot('error');
+        statusText.textContent = 'error';
         actionsRow.classList.add('hidden');
       } else if (name === 'denied') {
-        card.classList.add('state-denied');
-        statusChip.className = 'chip chip-neutral action-card-status';
-        statusChip.textContent = 'Denied';
+        setDot('denied');
+        statusText.textContent = 'denied';
         actionsRow.classList.add('hidden');
       }
       if (detail) {
@@ -578,7 +561,7 @@ export async function render(container, param) {
         if (!currentAssistant) currentAssistant = newAssistantMessage();
         if (!currentAssistant.gotToken) {
           currentAssistant.gotToken = true;
-          currentAssistant.bubble.querySelector('.thinking-dots')?.remove();
+          currentAssistant.bubble.querySelector('.thinking')?.remove();
           setStatus('writing', `${assistantName()} is writing…`);
         }
         currentAssistant.buffer += data?.text ?? '';
@@ -587,7 +570,7 @@ export async function render(container, param) {
       }
       case 'action_proposal': {
         if (!currentAssistant) currentAssistant = newAssistantMessage();
-        currentAssistant.bubble.querySelector('.thinking-dots')?.remove();
+        currentAssistant.bubble.querySelector('.thinking')?.remove();
         const { card, setState } = createActionCard(data);
         currentAssistant.actionCards.set(String(data?.action_id), { card, setState });
         currentAssistant.cardsEl.appendChild(card);
@@ -614,17 +597,18 @@ export async function render(container, param) {
           currentAssistant.cardsEl.appendChild(card);
           setState(ok ? 'ok' : 'error', detail);
         }
-        currentAssistant.bubble.querySelector('.thinking-dots')?.remove();
+        currentAssistant.bubble.querySelector('.thinking')?.remove();
         setStatus('thinking', `${assistantName()} is thinking…`);
         scrollToBottom();
         break;
       }
       case 'memory_saved': {
-        const target = currentAssistant?.body || messagesEl;
-        const pill = el('span', { class: 'memory-pill', title: data?.text || '' },
-          `🧠 Remembered: ${data?.text || ''}`);
+        const pill = el('div', { class: 'memory-pill', title: data?.text || '' }, [
+          el('span', { class: 'mem-dot' }),
+          el('span', {}, `Remembered — ${data?.text || ''}`),
+        ]);
         if (currentAssistant) currentAssistant.body.appendChild(pill);
-        else target.appendChild(pill);
+        else messagesEl.appendChild(pill);
         scrollToBottom();
         break;
       }
@@ -635,9 +619,8 @@ export async function render(container, param) {
       case 'error': {
         const message = data?.message || 'Something went wrong on Luna’s side.';
         if (currentAssistant && currentAssistant.buffer) {
-          // keep partial text, add an error note under it
           currentAssistant.body.appendChild(
-            el('div', { class: 'msg-bubble error-bubble' }, message));
+            el('div', { class: 'error-text' }, message));
           doneReceived = true; // treat as terminal
         } else {
           if (!currentAssistant) currentAssistant = newAssistantMessage();
@@ -692,7 +675,6 @@ export async function render(container, param) {
         handleEvent,
         { signal: abortController.signal }
       );
-      // Stream ended.
       finalizeAssistant({ interrupted: wasAborted() || !doneReceived });
       if (!doneReceived && !wasAborted()) {
         toast('Connection to Luna closed early — reply may be incomplete', 'info');
@@ -768,7 +750,7 @@ export async function render(container, param) {
         } else {
           const a = newAssistantMessage();
           a.bubble.classList.remove('streaming');
-          a.bubble.querySelector('.thinking-dots')?.remove();
+          a.bubble.querySelector('.thinking')?.remove();
           renderMarkdownInto(a.contentEl, m.content || '');
           const plain = a.contentEl.textContent || '';
           a.footer.appendChild(el('span', { class: 'msg-time' },

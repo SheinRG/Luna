@@ -1,6 +1,6 @@
 // luna/ui/js/screens/privacy.js
-// Privacy dashboard: permission toggles, activity timeline, stored-data
-// summary, and the double-confirmed "Delete all my data".
+// Privacy dashboard: permission switches, activity list, stored-data stats,
+// data path, and the double-confirmed "Delete all my data".
 // GET/PUT /api/permissions · GET /api/activity?limit=100 · POST /api/data/delete-all
 
 import { el, formatRelativeTime } from '../util.js';
@@ -10,27 +10,31 @@ import { toast } from '../components/toast.js';
 import { confirmDialog } from '../components/modal.js';
 import { renderShell } from '../components/shell.js';
 
+// Descriptions match SPEC §3 permission categories (REDESIGN copy).
 const PERMISSION_META = {
-  apps: { icon: '🚀', desc: 'Launch installed applications for you' },
-  files: { icon: '📁', desc: 'Search and organize files in your user folders' },
-  notifications: { icon: '🔔', desc: 'Show Windows toast reminders' },
-  voice: { icon: '🎙️', desc: 'Use your microphone for voice input' },
+  apps: 'Launch installed applications',
+  files: 'Search and organize your files',
+  notifications: 'Send reminder toasts',
+  voice: 'Show the mic button (on-device Whisper)',
 };
+
+function cap(s) {
+  return String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
+}
 
 export async function render(container) {
   const main = renderShell(container, 'privacy');
 
-  const permGrid = el('div', { class: 'perm-grid' });
+  const permsEl = el('div', { class: 'hair-list' });
   const activityEl = el('div', {});
   const summaryEl = el('div', {});
 
   /* ================= permissions ================= */
   async function loadPermissions() {
-    permGrid.innerHTML = '';
+    permsEl.innerHTML = '';
     let perms = {};
     try {
       const res = await api.getPermissions();
-      // tolerate {apps: true, ...} or [{category, granted}, ...]
       if (Array.isArray(res)) {
         for (const p of res) perms[p.category] = truthy(p.granted);
       } else if (res && typeof res === 'object') {
@@ -38,7 +42,7 @@ export async function render(container) {
       }
       state.permissions = perms;
     } catch (err) {
-      permGrid.appendChild(el('div', { class: 'empty-state' }, [
+      permsEl.appendChild(el('div', { class: 'empty-state' }, [
         el('div', { class: 'empty-icon' }, '🌫️'),
         el('h4', {}, 'Couldn’t load permissions'),
         el('p', {}, `${err.message} — is Luna’s backend running?`),
@@ -47,24 +51,22 @@ export async function render(container) {
     }
 
     for (const cat of Object.keys(PERMISSION_META)) {
-      const meta = PERMISSION_META[cat];
       const input = el('input', { type: 'checkbox' });
       input.checked = !!perms[cat];
       input.addEventListener('change', async () => {
         try {
           await api.putPermissions({ [cat]: input.checked });
           state.permissions[cat] = input.checked;
-          toast(`${cat} ${input.checked ? 'allowed' : 'revoked'}`, 'success');
+          toast(`${cap(cat)} ${input.checked ? 'allowed' : 'revoked'}`, 'success');
         } catch (err) {
           input.checked = !input.checked;
           toast(`Couldn’t update: ${err.message}`, 'error');
         }
       });
-      permGrid.appendChild(el('div', { class: 'perm-card' }, [
-        el('span', { class: 'perm-icon', 'aria-hidden': 'true' }, meta.icon),
-        el('div', { class: 'perm-body' }, [
-          el('div', { class: 'perm-name' }, cat),
-          el('div', { class: 'perm-desc' }, meta.desc),
+      permsEl.appendChild(el('div', { class: 'hair-row' }, [
+        el('div', { class: 'hair-body' }, [
+          el('div', { class: 'hair-title' }, cap(cat)),
+          el('div', { class: 'hair-meta' }, PERMISSION_META[cat]),
         ]),
         el('label', { class: 'switch', 'aria-label': `Allow ${cat}` }, [
           input, el('span', { class: 'track' }), el('span', { class: 'thumb' }),
@@ -73,7 +75,7 @@ export async function render(container) {
     }
   }
 
-  /* ================= activity timeline ================= */
+  /* ================= activity ================= */
   async function loadActivity() {
     activityEl.innerHTML = '';
     try {
@@ -87,20 +89,16 @@ export async function render(container) {
         ]));
         return;
       }
-      const timeline = el('div', { class: 'activity-timeline' });
+      const list = el('div', { class: 'hair-list' });
       for (const a of items) {
-        timeline.appendChild(el('div', {
-          class: `activity-item${a.status && a.status !== 'ok' ? ' status-error' : ''}`,
-        }, [
-          el('div', { class: 'activity-desc' }, a.description || a.action_id || 'action'),
-          el('div', { class: 'activity-meta' }, [
-            a.action_id && el('span', { class: 'chip chip-neutral' }, a.action_id),
-            a.status && el('span', { class: a.status === 'ok' ? '' : 'reminder-overdue' }, a.status),
-            a.created_at && el('span', {}, formatRelativeTime(a.created_at)),
-          ]),
+        const isError = a.status && a.status !== 'ok';
+        list.appendChild(el('div', { class: 'activity-row' }, [
+          el('span', { class: `status-dot${isError ? ' error' : ''}` }),
+          el('span', { class: 'activity-desc' }, a.description || a.action_id || 'action'),
+          a.created_at && el('span', { class: 'activity-time' }, formatRelativeTime(a.created_at)),
         ]));
       }
-      activityEl.appendChild(timeline);
+      activityEl.appendChild(list);
     } catch (err) {
       activityEl.appendChild(el('div', { class: 'empty-state' }, [
         el('div', { class: 'empty-icon' }, '🌫️'),
@@ -114,14 +112,14 @@ export async function render(container) {
   async function loadSummary() {
     summaryEl.innerHTML = '';
     const counts = [
-      { label: 'Conversations', fetch: api.listConversations, key: 'conversations' },
-      { label: 'Memories', fetch: api.listMemories, key: 'memories' },
-      { label: 'Reminders', fetch: api.listReminders, key: 'reminders' },
-      { label: 'To-dos', fetch: api.listTodos, key: 'todos' },
-      { label: 'Notes', fetch: api.listNotes, key: 'notes' },
+      { label: 'conversations', fetch: api.listConversations, key: 'conversations' },
+      { label: 'memories', fetch: api.listMemories, key: 'memories' },
+      { label: 'reminders', fetch: api.listReminders, key: 'reminders' },
+      { label: 'to-dos', fetch: api.listTodos, key: 'todos' },
+      { label: 'notes', fetch: api.listNotes, key: 'notes' },
     ];
-    const grid = el('div', { class: 'data-summary-grid' });
-    summaryEl.appendChild(grid);
+    const row = el('div', { class: 'stat-row' });
+    summaryEl.appendChild(row);
 
     await Promise.all(counts.map(async (c) => {
       let value = '—';
@@ -130,23 +128,20 @@ export async function render(container) {
         const arr = Array.isArray(res) ? res : res?.[c.key] || [];
         value = String(arr.length);
       } catch (_err) { /* backend down → dash */ }
-      grid.appendChild(el('div', { class: 'stat-card' }, [
-        el('div', { class: 'stat-value' }, value),
+      row.appendChild(el('div', { class: 'stat' }, [
+        el('div', { class: 'stat-num' }, value),
         el('div', { class: 'stat-label' }, c.label),
       ]));
     }));
 
     const dataDir = state.health?.data_dir;
     if (dataDir) {
-      summaryEl.appendChild(el('div', { class: 'data-path-row' }, [
-        el('span', {}, '📂'),
-        el('span', {}, dataDir),
-      ]));
+      summaryEl.appendChild(el('div', { class: 'data-path' }, dataDir));
     }
   }
 
   /* ================= delete all data ================= */
-  const deleteBtn = el('button', { class: 'btn btn-danger' }, 'Delete all my data');
+  const deleteBtn = el('button', { class: 'btn btn-danger privacy-delete' }, 'Delete all my data…');
   deleteBtn.addEventListener('click', async () => {
     const first = await confirmDialog({
       title: 'Delete everything?',
@@ -176,23 +171,17 @@ export async function render(container) {
   main.appendChild(el('div', { class: 'page' }, [
     el('div', { class: 'page-inner' }, [
       el('div', { class: 'page-header' }, [
-        el('div', {}, [
-          el('h2', {}, 'Privacy'),
-          el('p', { class: 'page-sub' },
-            'Luna is 100% offline — nothing ever leaves this laptop. Here’s exactly what she can do and what she’s stored.'),
-        ]),
+        el('h2', { class: 'page-title' }, 'Privacy'),
+        el('p', { class: 'page-sub' },
+          'Fully offline. Nothing leaves this laptop — here’s exactly what Luna can do and what she’s stored.'),
       ]),
       el('h3', { class: 'section-title' }, 'Permissions'),
-      permGrid,
+      permsEl,
       el('h3', { class: 'section-title' }, 'Action history'),
       activityEl,
-      el('h3', { class: 'section-title' }, 'What’s stored on this device'),
+      el('h3', { class: 'section-title' }, 'Stored on this device'),
       summaryEl,
-      el('div', { class: 'danger-zone' }, [
-        el('h4', {}, 'Danger zone'),
-        el('p', {}, 'Wipe the database, uploads and notes, and return Luna to her first-run state.'),
-        deleteBtn,
-      ]),
+      deleteBtn,
     ]),
   ]));
 

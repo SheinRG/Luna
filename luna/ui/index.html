@@ -1,10 +1,13 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="night">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Luna</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23b7a8ff'/%3E%3Cstop offset='1' stop-color='%237c6cf0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath fill='url(%23g)' d='M42.8 8.2A26 26 0 1 0 55.8 41 21 21 0 0 1 42.8 8.2z'/%3E%3Ccircle fill='%23b7a8ff' opacity='.9' cx='46' cy='14' r='2.2'/%3E%3Ccircle fill='%23b7a8ff' opacity='.6' cx='54' cy='22' r='1.4'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23aca0f2' d='M42.8 8.2A26 26 0 1 0 55.8 41 21 21 0 0 1 42.8 8.2z'/%3E%3C/svg%3E" />
+
+  <!-- Self-hosted fonts (offline; NO CDN at runtime). Linked first. -->
+  <link rel="stylesheet" href="vendor/fonts.css" />
 
   <!-- Vendored (offline) libs — no CDN at runtime -->
   <link rel="stylesheet" href="vendor/hljs-theme-dark.css" id="hljs-theme-dark" />
@@ -22,14 +25,8 @@
     <!-- Boot splash — replaced by the router as soon as app.js runs -->
     <div class="boot-splash">
       <div class="boot-moon" aria-hidden="true">
-        <svg width="56" height="56" viewBox="0 0 64 64" fill="none">
-          <defs>
-            <linearGradient id="bootg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#b7a8ff" />
-              <stop offset="1" stop-color="#7c6cf0" />
-            </linearGradient>
-          </defs>
-          <path fill="url(#bootg)" d="M42.8 8.2A26 26 0 1 0 55.8 41 21 21 0 0 1 42.8 8.2z" />
+        <svg width="52" height="52" viewBox="0 0 64 64">
+          <path fill="var(--accent)" d="M42.8 8.2A26 26 0 1 0 55.8 41 21 21 0 0 1 42.8 8.2z" />
         </svg>
       </div>
       <p class="boot-label">Luna is waking up…</p>

@@ -1,11 +1,13 @@
 // luna/ui/js/screens/settings.js
-// Settings: names, theme, font size, personality, response length, model,
-// voice toggles, memory on/off. GET/PUT /api/settings (flat JSON).
+// Settings: appearance (theme / accent / font size), names, personality,
+// response length, model, voice toggles, memory on/off.
+// GET/PUT /api/settings (flat JSON).
 
 import { el, debounce } from '../util.js';
 import { api } from '../api.js';
 import {
-  state, getSetting, truthy, applyTheme, applyFontSize,
+  state, getSetting, truthy, applyTheme, applyAccent, applyFontSize,
+  normalizeTheme, ACCENTS, DEFAULT_ACCENT,
 } from '../state.js';
 import { toast } from '../components/toast.js';
 import { renderShell } from '../components/shell.js';
@@ -25,7 +27,17 @@ export async function render(container) {
   }
   const saveDebounced = debounce(save, 500);
 
-  /* ---------- builders ---------- */
+  /* ---------- row builders ---------- */
+  function settingsRow(label, desc, control) {
+    return el('div', { class: 'settings-row' }, [
+      el('div', { class: 'settings-info' }, [
+        el('div', { class: 'settings-label' }, label),
+        desc && el('div', { class: 'settings-desc' }, desc),
+      ]),
+      el('div', { class: 'settings-control' }, [control]),
+    ]);
+  }
+
   function rowText(label, desc, key, placeholder) {
     const input = el('input', {
       class: 'text-input', type: 'text', placeholder, value: getSetting(key, ''),
@@ -46,7 +58,7 @@ export async function render(container) {
       ]));
   }
 
-  function rowSegmented(label, desc, key, options, current, onPick) {
+  function rowSegmented(label, desc, options, current, onPick) {
     const seg = el('div', { class: 'segmented', role: 'group', 'aria-label': label });
     const buttons = options.map((opt) => {
       const value = typeof opt === 'string' ? opt : opt.value;
@@ -57,7 +69,7 @@ export async function render(container) {
         onClick: () => {
           buttons.forEach((b) => b.classList.remove('active'));
           btn.classList.add('active');
-          onPick ? onPick(value) : save({ [key]: value });
+          onPick(value);
         },
       }, text);
       return btn;
@@ -66,69 +78,89 @@ export async function render(container) {
     return settingsRow(label, desc, seg);
   }
 
-  function settingsRow(label, desc, control) {
-    return el('div', { class: 'settings-row' }, [
-      el('div', { class: 'settings-info' }, [
-        el('div', { class: 'settings-label' }, label),
-        desc && el('div', { class: 'settings-desc' }, desc),
-      ]),
-      el('div', { class: 'settings-control' }, [control]),
-    ]);
+  function rowSwatches(label, desc) {
+    const current = (getSetting('accent') ||
+      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() ||
+      DEFAULT_ACCENT).toUpperCase();
+    const row = el('div', { class: 'swatch-row', role: 'group', 'aria-label': label });
+    const buttons = ACCENTS.map((hex) => {
+      const btn = el('button', {
+        type: 'button',
+        class: `swatch${hex.toUpperCase() === current ? ' selected' : ''}`,
+        style: `background:${hex}`,
+        title: hex,
+        'aria-label': `Accent ${hex}`,
+        onClick: () => {
+          buttons.forEach((b) => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          applyAccent(hex);
+          save({ accent: hex });
+        },
+      });
+      return btn;
+    });
+    buttons.forEach((b) => row.appendChild(b));
+    return settingsRow(label, desc, row);
   }
 
   /* ---------- model picker ---------- */
-  const modelList = el('div', { class: 'model-list', style: 'max-width:340px' });
+  const modelList = el('div', { class: 'model-list', style: 'max-width:320px' });
   renderModelOptions(modelList, getSetting('model', state.health?.active_model || ''), (m) => {
     save({ model: m });
   });
+
+  const currentTheme = normalizeTheme(
+    getSetting('theme') || document.documentElement.getAttribute('data-theme') || 'night');
 
   /* ---------- assemble ---------- */
   main.appendChild(el('div', { class: 'page' }, [
     el('div', { class: 'page-inner' }, [
       el('div', { class: 'page-header' }, [
-        el('div', {}, [
-          el('h2', {}, 'Settings'),
-          el('p', { class: 'page-sub' }, 'Changes save automatically and stay on this device.'),
-        ]),
+        el('h2', { class: 'page-title' }, 'Settings'),
+        el('p', { class: 'page-sub' }, 'Changes save automatically and stay on this device.'),
       ]),
 
-      el('h3', { class: 'section-title' }, '👤 Profile'),
+      el('h3', { class: 'section-title' }, 'Appearance'),
+      el('div', { class: 'settings-group' }, [
+        rowSegmented('Theme', 'Night is Luna’s natural habitat',
+          [{ value: 'night', label: 'Night' }, { value: 'day', label: 'Day' }],
+          currentTheme,
+          (v) => { applyTheme(v); save({ theme: v }); }),
+        rowSwatches('Accent', 'A single colour across the whole app'),
+        rowSegmented('Font size', 'Scales the whole interface',
+          [{ value: 'small', label: 'S' }, { value: 'medium', label: 'M' }, { value: 'large', label: 'L' }],
+          getSetting('font_size', 'medium'),
+          (v) => { applyFontSize(v); save({ font_size: v }); }),
+      ]),
+
+      el('h3', { class: 'section-title' }, 'You'),
       el('div', { class: 'settings-group' }, [
         rowText('Your name', 'Used in greetings and to personalize replies', 'user_name', 'e.g. Raghav'),
         rowText('Assistant name', 'What your assistant answers to', 'assistant_name', 'Luna'),
       ]),
 
-      el('h3', { class: 'section-title' }, '🎨 Appearance'),
+      el('h3', { class: 'section-title' }, 'Assistant'),
       el('div', { class: 'settings-group' }, [
-        rowSegmented('Theme', 'Night is Luna’s natural habitat', 'theme',
-          [{ value: 'dark', label: '🌙 Night' }, { value: 'light', label: '☀️ Day' }],
-          document.documentElement.getAttribute('data-theme') || 'dark',
-          (v) => { applyTheme(v); save({ theme: v }); }),
-        rowSegmented('Font size', 'Scales the whole interface', 'font_size',
-          [{ value: 'small', label: 'A' }, { value: 'medium', label: 'A+' },
-           { value: 'large', label: 'A++' }, { value: 'xl', label: 'A+++' }],
-          getSetting('font_size', 'medium'),
-          (v) => { applyFontSize(v); save({ font_size: v }); }),
-      ]),
-
-      el('h3', { class: 'section-title' }, '✨ Assistant'),
-      el('div', { class: 'settings-group' }, [
-        rowSegmented('Personality', 'Sets the tone of every reply', 'personality',
+        rowSegmented('Personality', 'Sets the tone of every reply',
           ['Friendly', 'Professional', 'Concise', 'Playful'],
-          getSetting('personality', 'Friendly')),
-        rowSegmented('Response length', 'Short answers are faster on this hardware', 'response_length',
+          getSetting('personality', 'Friendly'),
+          (v) => save({ personality: v })),
+        rowSegmented('Response length', 'Short answers are faster on this hardware',
           [{ value: 'short', label: 'Short' }, { value: 'medium', label: 'Medium' },
            { value: 'long', label: 'Long' }],
-          getSetting('response_length', 'medium')),
-        settingsRow('Model',
-          'Which local Ollama model Luna thinks with',
-          modelList),
-        rowSwitch('Memory', 'Let Luna remember preferences and facts across chats', 'memory_enabled', true),
+          getSetting('response_length', 'medium'),
+          (v) => save({ response_length: v })),
       ]),
 
-      el('h3', { class: 'section-title' }, '🎙️ Voice'),
+      el('h3', { class: 'section-title' }, 'Intelligence'),
       el('div', { class: 'settings-group' }, [
-        rowSwitch('Voice input', 'Show the mic button (uses the on-device Whisper model)', 'voice_enabled', true),
+        settingsRow('Model', 'Which local Ollama model Luna thinks with', modelList),
+        rowSwitch('Memory', 'Remember preferences and facts across chats', 'memory_enabled', true),
+      ]),
+
+      el('h3', { class: 'section-title' }, 'Voice'),
+      el('div', { class: 'settings-group' }, [
+        rowSwitch('Voice input', 'Show the mic button (on-device Whisper)', 'voice_enabled', true),
         rowSwitch('Auto-speak replies', 'Read every reply aloud when it finishes', 'auto_speak', false),
       ]),
 

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Luna — Base / reset / typography / scrollbars
+   Luna — Base / reset / typography / scrollbars / keyframes
    ========================================================================== */
 
 *,
@@ -15,14 +15,17 @@ body {
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Font size setting scales the whole interface via rem units. */
+  font-size: calc(16px * var(--font-scale));
 }
 
 body {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: var(--fs-base);
-  color: var(--text-primary);
-  background: var(--bg-1);
+  font-size: 0.9375rem; /* 15px */
+  line-height: 1.5;
+  color: var(--tx1);
+  background: var(--bg1);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden;
@@ -58,6 +61,15 @@ select {
   outline: none;
 }
 
+/* Remove focus outlines on form controls — custom accent focus is applied
+   per-component (accent border / ring). */
+input:focus,
+textarea:focus,
+button:focus,
+select:focus {
+  outline: none;
+}
+
 a {
   color: var(--accent);
 }
@@ -80,29 +92,26 @@ img {
 }
 
 ::selection {
-  background: var(--accent-soft-strong);
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--tx1);
 }
 
-/* ---- Focus states (accessible, visible, unobtrusive) ---- */
-:focus {
-  outline: none;
-}
-
+/* ---- Accessible, visible focus for keyboard users ---- */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
 
-/* ---- Custom scrollbars ---- */
+/* ---- Thin scrollbars ---- */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 *::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
 }
 
 *::-webkit-scrollbar-track {
@@ -112,13 +121,6 @@ img {
 *::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border-radius: var(--radius-round);
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-  background-clip: content-box;
 }
 
 /* ---- Utility ---- */
@@ -126,7 +128,8 @@ img {
   display: none !important;
 }
 
-.visually-hidden {
+.visually-hidden,
+.sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -138,15 +141,83 @@ img {
   border: 0;
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+/* ==========================================================================
+   Keyframes
+   ========================================================================== */
+
+/* Breathing — moon logo & thinking indicator */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.85;
+  }
 }
 
-/* Reduced motion respect */
+/* Rise — message & screen entrance */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Dot pulse — pending action dot */
+@keyframes dotpulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Fade — overlays / modals */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Spin — spinners */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Toast in/out */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

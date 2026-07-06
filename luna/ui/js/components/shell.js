@@ -1,39 +1,43 @@
 // luna/ui/js/components/shell.js
-// The persistent app shell: glass sidebar (logo, new chat, history, nav)
-// + main pane. Reused across screens to avoid re-mount flicker.
+// The persistent app shell: a 64px icon RAIL (logo, new-chat, nav icons,
+// spacer, settings) + main pane. The conversation-history list no longer
+// lives in the rail — it is relocated to the chat composer footer ("Recent"),
+// but the data/delete logic still lives here (refreshConversations /
+// renderRecentInto / highlightActiveConversation) so chat.js can drive it.
 
 import { el, escapeHtml } from '../util.js';
-import { state, assistantName } from '../state.js';
+import { state } from '../state.js';
 import { api } from '../api.js';
 import { toast } from './toast.js';
 import { confirmDialog } from './modal.js';
 
-const ICONS = {
-  chat: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
-  memory: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a4 4 0 0 0-4 4c-2.2.5-4 2.3-4 4.6C4 14.4 6 16 8 16v3a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-3c2 0 4-1.6 4-4.4 0-2.3-1.8-4.1-4-4.6a4 4 0 0 0-4-4z"/></svg>',
-  tasks: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="m3.5 5.5 1 1L6.5 4.5"/><path d="m3.5 11.5 1 1 2-2"/><path d="m3.5 17.5 1 1 2-2"/></svg>',
-  privacy: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-3.5 8-10V5l-8-3-8 3v7c0 6.5 8 10 8 10z"/><path d="m9 11.5 2 2 4-4.5"/></svg>',
-  settings: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
-  plus: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
-  trash: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
-};
+/** Crescent moon (inline SVG, fill var(--accent)). */
+export function moonSvg(size = 22) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 64 64" aria-hidden="true"><path fill="var(--accent)" d="M42.8 8.2A26 26 0 1 0 55.8 41 21 21 0 0 1 42.8 8.2z"/></svg>`;
+}
 
-export const LOGO_SVG = `<svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-  <defs><linearGradient id="lunalogo-grad" x1="0" y1="0" x2="1" y2="1">
-    <stop offset="0" stop-color="#b7a8ff"/><stop offset="1" stop-color="#7c6cf0"/>
-  </linearGradient></defs>
-  <path fill="url(#lunalogo-grad)" d="M42.8 8.2A26 26 0 1 0 55.8 41 21 21 0 0 1 42.8 8.2z"/>
-  <circle fill="#b7a8ff" opacity=".9" cx="46" cy="14" r="2.2"/>
-  <circle fill="#b7a8ff" opacity=".6" cx="54" cy="22" r="1.4"/>
-</svg>`;
+// Back-compat export (was used by setup.js).
+export const LOGO_SVG = moonSvg(22);
+
+const ICONS = {
+  chat: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  memory: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a4 4 0 0 0-4 4c-2.2.5-4 2.3-4 4.6C4 14.4 6 16 8 16v3a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-3c2 0 4-1.6 4-4.4 0-2.3-1.8-4.1-4-4.6a4 4 0 0 0-4-4z"/></svg>',
+  tasks: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="m3.5 5.5 1 1L6.5 4.5"/><path d="m3.5 11.5 1 1 2-2"/><path d="m3.5 17.5 1 1 2-2"/></svg>',
+  privacy: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-3.5 8-10V5l-8-3-8 3v7c0 6.5 8 10 8 10z"/><path d="m9 11.5 2 2 4-4.5"/></svg>',
+  settings: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  trash: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+};
 
 const NAV_ITEMS = [
   { id: 'chat', label: 'Chat', hash: '#/chat' },
   { id: 'memory', label: 'Memory', hash: '#/memory' },
   { id: 'tasks', label: 'Tasks', hash: '#/tasks' },
   { id: 'privacy', label: 'Privacy', hash: '#/privacy' },
-  { id: 'settings', label: 'Settings', hash: '#/settings' },
 ];
+const SETTINGS_ITEM = { id: 'settings', label: 'Settings', hash: '#/settings' };
+
+const RECENT_LIMIT = 5;
 
 /**
  * Ensures the app shell exists inside `container`, marks `activeNav`,
@@ -48,7 +52,7 @@ export function renderShell(container, activeNav) {
     refreshConversations();
   }
 
-  shell.querySelectorAll('.nav-item').forEach((btn) => {
+  shell.querySelectorAll('.rail-nav').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.nav === activeNav);
   });
   highlightActiveConversation();
@@ -64,14 +68,25 @@ export function destroyShell(container) {
   if (shell) shell.remove();
 }
 
+function railButton({ id, label, hash }) {
+  return el('button', {
+    class: 'rail-nav',
+    dataset: { nav: id },
+    title: label,
+    'aria-label': label,
+    html: ICONS[id],
+    onClick: () => { location.hash = hash; },
+  });
+}
+
 function buildShell() {
-  const sidebar = el('aside', { class: 'sidebar glass' }, [
-    el('div', { class: 'sidebar-header' }, [
-      el('span', { class: 'sidebar-logo', html: LOGO_SVG }),
-      el('span', { class: 'sidebar-title' }, assistantName()),
-    ]),
+  const rail = el('aside', { class: 'rail', 'aria-label': 'Navigation' }, [
+    el('span', { class: 'rail-logo', html: moonSvg(22) }),
     el('button', {
-      class: 'btn btn-primary sidebar-new-chat',
+      class: 'rail-newchat',
+      title: 'New chat',
+      'aria-label': 'New chat',
+      html: ICONS.plus,
       onClick: () => {
         state.activeConversationId = null;
         if (location.hash === '#/chat' || location.hash === '#/chat/') {
@@ -80,31 +95,19 @@ function buildShell() {
           location.hash = '#/chat';
         }
       },
-    }, [el('span', { html: ICONS.plus }), 'New chat']),
-    el('div', { class: 'sidebar-section-label' }, 'Recent'),
-    el('div', { class: 'sidebar-history', id: 'sidebar-history' }, [
-      el('div', { class: 'sidebar-history-empty' }, 'Loading…'),
-    ]),
-    el('nav', { class: 'sidebar-nav', 'aria-label': 'Main navigation' },
-      NAV_ITEMS.map((item) =>
-        el('button', {
-          class: 'nav-item',
-          dataset: { nav: item.id },
-          onClick: () => { location.hash = item.hash; },
-        }, [el('span', { html: ICONS[item.id] }), item.label])
-      )
-    ),
+    }),
+    ...NAV_ITEMS.map(railButton),
+    el('div', { class: 'rail-spacer' }),
+    railButton(SETTINGS_ITEM),
   ]);
 
   const main = el('main', { class: 'main-pane' });
-  return el('div', { class: 'app-shell' }, [sidebar, main]);
+  return el('div', { class: 'app-shell' }, [rail, main]);
 }
 
-/* ---------------- Conversation history ---------------- */
+/* ---------------- Conversation history (relocated to composer footer) ------ */
 
 export async function refreshConversations() {
-  const listEl = document.getElementById('sidebar-history');
-  if (!listEl) return;
   try {
     const conversations = await api.listConversations();
     state.conversations = Array.isArray(conversations)
@@ -112,31 +115,31 @@ export async function refreshConversations() {
       : conversations?.conversations || [];
   } catch (_err) {
     state.conversations = state.conversations || [];
-    listEl.innerHTML = '';
-    listEl.appendChild(
-      el('div', { class: 'sidebar-history-empty' }, 'History unavailable — Luna’s backend is offline.')
-    );
-    return;
   }
-  renderHistoryList(listEl);
+  const listEl = document.getElementById('recent-list');
+  if (listEl) renderRecentInto(listEl);
 }
 
-function renderHistoryList(listEl) {
+/** Renders the "Recent" conversation buttons into `listEl` (the composer
+ *  footer list). Shows the newest few; hides its footer when empty. */
+export function renderRecentInto(listEl) {
   listEl.innerHTML = '';
-  if (!state.conversations.length) {
-    listEl.appendChild(
-      el('div', { class: 'sidebar-history-empty' },
-        'No conversations yet.\nStart one below 🌙')
-    );
+  const footer = listEl.closest('.recent-footer');
+  const items = (state.conversations || []).slice(0, RECENT_LIMIT);
+  if (!items.length) {
+    if (footer) footer.classList.add('hidden');
     return;
   }
-  for (const convo of state.conversations) {
+  if (footer) footer.classList.remove('hidden');
+
+  for (const convo of items) {
     const id = convo.id;
     const item = el('div', {
-      class: 'history-item',
+      class: 'recent-item',
       role: 'button',
       tabindex: '0',
       dataset: { convoId: String(id) },
+      title: convo.title || 'Untitled chat',
       onClick: () => { location.hash = `#/chat/${id}`; },
       onKeydown: (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -145,11 +148,11 @@ function renderHistoryList(listEl) {
         }
       },
     }, [
-      el('span', { class: 'history-title', title: convo.title || 'Untitled' },
-        convo.title || 'Untitled chat'),
+      el('span', { class: 'recent-title' }, convo.title || 'Untitled chat'),
       el('button', {
-        class: 'icon-btn history-delete',
+        class: 'icon-btn recent-delete',
         'aria-label': `Delete conversation ${escapeHtml(convo.title || '')}`,
+        title: 'Delete conversation',
         html: ICONS.trash,
         onClick: async (e) => {
           e.stopPropagation();
@@ -180,7 +183,7 @@ function renderHistoryList(listEl) {
 }
 
 export function highlightActiveConversation() {
-  document.querySelectorAll('.history-item').forEach((item) => {
+  document.querySelectorAll('.recent-item').forEach((item) => {
     item.classList.toggle(
       'active',
       state.activeConversationId != null &&

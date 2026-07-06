@@ -1,0 +1,65 @@
+/* ==========================================================================
+   Luna — Self-hosted fonts (offline; NO CDN at runtime)
+   Vendored woff2 (latin subset) from Google Fonts into vendor/fonts/.
+   Linked before all other CSS so the families are ready when tokens.css
+   references them.
+   Families:
+     • Instrument Sans   400/500/600  — all UI text
+     • Instrument Serif  400 + italic  — display headings & hero greeting
+     • JetBrains Mono    400/500       — model ids, paths, code, status text
+   ========================================================================== */
+
+/* ---- Instrument Sans ---- */
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/instrument-sans-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("fonts/instrument-sans-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/instrument-sans-600.woff2") format("woff2");
+}
+
+/* ---- Instrument Serif ---- */
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/instrument-serif-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/instrument-serif-400-italic.woff2") format("woff2");
+}
+
+/* ---- JetBrains Mono ---- */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/jetbrains-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("fonts/jetbrains-mono-500.woff2") format("woff2");
+}

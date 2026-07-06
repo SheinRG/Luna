@@ -1,9 +1,19 @@
 /* ==========================================================================
-   Luna — Design tokens
-   Calm night-sky aesthetic. Dark (default) + Light themes via [data-theme].
+   Luna — Design tokens ("minimal approach" redesign)
+   Calm, editorial, near-black. Two themes: night (default) + day, switched by
+   the [data-theme] root attribute. One lavender accent, set from settings via
+   the --accent custom property. Thin hairlines instead of boxes; no glass.
    ========================================================================== */
 
 :root {
+  /* ---- Type families (self-hosted, see vendor/fonts.css) ---- */
+  --font-sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  /* ---- Root font scale — Settings > Font size drives this (S/M/L) ---- */
+  --font-scale: 1;
+
   /* ---- Spacing scale ---- */
   --space-1: 4px;
   --space-2: 8px;
@@ -19,7 +29,7 @@
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
-  --radius-xl: 22px;
+  --radius-xl: 18px;
   --radius-round: 999px;
 
   /* ---- Motion ---- */
@@ -28,144 +38,77 @@
   --dur-med: 200ms;
   --dur-slow: 360ms;
 
-  /* ---- Typography ---- */
-  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
-    sans-serif;
-  --font-mono: "Cascadia Code", "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas,
-    monospace;
+  /* ---- Layout metrics ---- */
+  --rail-w: 64px;
+  --topbar-h: 52px;
 
-  /* Root font scale — Settings > Font size multiplies this */
-  --font-scale: 1;
-  --fs-xs: calc(0.75rem * var(--font-scale));
-  --fs-sm: calc(0.8125rem * var(--font-scale));
-  --fs-base: calc(0.9375rem * var(--font-scale));
-  --fs-md: calc(1.0625rem * var(--font-scale));
-  --fs-lg: calc(1.25rem * var(--font-scale));
-  --fs-xl: calc(1.625rem * var(--font-scale));
-  --fs-xxl: calc(2.125rem * var(--font-scale));
-
-  /* ---- Elevation ---- */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.16), 0 1px 1px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.18);
-  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.22);
-  --shadow-glow: 0 0 0 1px rgba(159, 140, 255, 0.16), 0 0 32px rgba(130, 110, 255, 0.18);
-
-  --sidebar-w: 272px;
-  --header-h: 60px;
-  --composer-h: auto;
+  /* ---- Accent (default lavender). Overridden inline from settings.accent ---- */
+  --accent: #aca0f2;
 }
 
 /* ---------------------------------------------------------------------- */
-/* Dark theme (default)                                                    */
+/* NIGHT theme (default / dark)                                            */
 /* ---------------------------------------------------------------------- */
 :root,
-:root[data-theme="dark"] {
+:root[data-theme="night"] {
   color-scheme: dark;
 
-  --bg-0: #0a0c18;
-  --bg-1: #0d1020;
-  --bg-2: #12162a;
-  --bg-3: #171c34;
-  --bg-elevated: #1a1f3a;
+  --bg0: #0b0c12; /* app / rail / composer bg */
+  --bg1: #0e1017; /* main content bg */
+  --surface: #14161f; /* raised chips, user bubble, active rail item, switch-off track */
 
-  --glass-bg: rgba(23, 27, 51, 0.55);
-  --glass-border: rgba(159, 148, 255, 0.14);
-  --glass-blur: 18px;
+  --line: rgba(255, 255, 255, 0.06); /* hairline dividers / rows */
+  --line2: rgba(255, 255, 255, 0.1); /* input & button borders */
 
-  --border-subtle: rgba(255, 255, 255, 0.07);
-  --border-default: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.16);
+  --tx1: #e9eaf0; /* primary text */
+  --tx2: #9a9dad; /* secondary text */
+  --tx3: #62667a; /* tertiary text */
 
-  --text-primary: #eef0fb;
-  --text-secondary: #a8adc9;
-  --text-tertiary: #767c9c;
-  --text-disabled: #4c5170;
+  --accentInk: #101018; /* text/icon placed ON the accent */
 
-  --accent: #9b8cff;
-  --accent-2: #7c6cf0;
-  --accent-soft: rgba(155, 140, 255, 0.16);
-  --accent-soft-strong: rgba(155, 140, 255, 0.28);
-  --accent-contrast: #14152b;
-  --accent-glow: rgba(139, 124, 255, 0.35);
+  --ok: #7fbfa0;
+  --danger: #d98a8a;
+  --dangerLine: rgba(217, 138, 138, 0.35);
 
-  --moon-glow: radial-gradient(
-    60% 46% at 50% 8%,
-    rgba(155, 140, 255, 0.22) 0%,
-    rgba(124, 108, 240, 0.1) 38%,
-    rgba(13, 16, 32, 0) 72%
-  );
+  /* category dots (memory) */
+  --cat-fact: #7fa8c9;
+  --cat-style: #c9b47f;
 
-  --success: #6fd6a8;
-  --success-soft: rgba(111, 214, 168, 0.14);
-  --warning: #f0c674;
-  --warning-soft: rgba(240, 198, 116, 0.14);
-  --danger: #ef8686;
-  --danger-soft: rgba(239, 134, 134, 0.14);
-  --info: #7cc4f0;
-  --info-soft: rgba(124, 196, 240, 0.14);
+  /* code surface */
+  --code-bg: #0e1017;
 
-  --scrollbar-thumb: rgba(159, 148, 255, 0.22);
-  --scrollbar-thumb-hover: rgba(159, 148, 255, 0.38);
-  --scrollbar-track: transparent;
-
-  --code-bg: #10131f;
-  --input-bg: rgba(255, 255, 255, 0.04);
-  --overlay-bg: rgba(6, 7, 16, 0.6);
+  --scrollbar-thumb: rgba(158, 160, 180, 0.25);
+  --overlay-bg: rgba(6, 7, 13, 0.62);
 }
 
 /* ---------------------------------------------------------------------- */
-/* Light theme                                                             */
+/* DAY theme (light)                                                       */
 /* ---------------------------------------------------------------------- */
-:root[data-theme="light"] {
+:root[data-theme="day"] {
   color-scheme: light;
 
-  --bg-0: #f3f2fb;
-  --bg-1: #f7f6fd;
-  --bg-2: #ffffff;
-  --bg-3: #edeafc;
-  --bg-elevated: #ffffff;
+  --bg0: #f6f6f8;
+  --bg1: #fdfdfe;
+  --surface: #efeff4;
 
-  --glass-bg: rgba(255, 255, 255, 0.6);
-  --glass-border: rgba(124, 108, 240, 0.14);
-  --glass-blur: 18px;
+  --line: rgba(24, 26, 44, 0.07);
+  --line2: rgba(24, 26, 44, 0.13);
 
-  --border-subtle: rgba(30, 20, 70, 0.06);
-  --border-default: rgba(30, 20, 70, 0.1);
-  --border-strong: rgba(30, 20, 70, 0.18);
+  --tx1: #1b1c26;
+  --tx2: #585b6c;
+  --tx3: #9295a6;
 
-  --text-primary: #1c1c33;
-  --text-secondary: #504f6e;
-  --text-tertiary: #7c7b99;
-  --text-disabled: #b3b2cc;
+  --accentInk: #14151e;
 
-  --accent: #6c5ce7;
-  --accent-2: #5b4bd6;
-  --accent-soft: rgba(108, 92, 231, 0.1);
-  --accent-soft-strong: rgba(108, 92, 231, 0.18);
-  --accent-contrast: #ffffff;
-  --accent-glow: rgba(108, 92, 231, 0.22);
+  --ok: #4e9a75;
+  --danger: #bc5f5f;
+  --dangerLine: rgba(188, 95, 95, 0.35);
 
-  --moon-glow: radial-gradient(
-    60% 46% at 50% 8%,
-    rgba(124, 108, 240, 0.16) 0%,
-    rgba(124, 108, 240, 0.07) 38%,
-    rgba(243, 242, 251, 0) 72%
-  );
+  --cat-fact: #5f83a8;
+  --cat-style: #a08a4e;
 
-  --success: #29a06e;
-  --success-soft: rgba(41, 160, 110, 0.12);
-  --warning: #b8830a;
-  --warning-soft: rgba(184, 131, 10, 0.12);
-  --danger: #d1495b;
-  --danger-soft: rgba(209, 73, 91, 0.12);
-  --info: #2f80c0;
-  --info-soft: rgba(47, 128, 192, 0.12);
+  --code-bg: #efeff4;
 
-  --scrollbar-thumb: rgba(108, 92, 231, 0.22);
-  --scrollbar-thumb-hover: rgba(108, 92, 231, 0.4);
-  --scrollbar-track: transparent;
-
-  --code-bg: #f1effc;
-  --input-bg: rgba(30, 20, 70, 0.035);
-  --overlay-bg: rgba(28, 28, 51, 0.35);
+  --scrollbar-thumb: rgba(90, 92, 110, 0.28);
+  --overlay-bg: rgba(24, 26, 44, 0.32);
 }
