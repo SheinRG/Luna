@@ -82,7 +82,7 @@ def _active_model() -> str:
 
 
 async def test_llm(model: str) -> None:
-    print(f"\n2. Live classification via Ollama (model: {model}):")
+    print(f"\n4. Live classification via Ollama (model: {model}):")
 
     # Informational — the model is fuzzy, so we show but don't fail on these.
     print("   (informational — how natural phrasings route)")
@@ -107,9 +107,9 @@ async def test_llm(model: str) -> None:
     )
 
 
-# --- 3. Capability-aware system prompt ----------------------------------------
+# --- 2. Capability-aware system prompt ----------------------------------------
 def test_prompt() -> None:
-    print("\n3. Chat system prompt (capability-aware fallback):")
+    print("\n2. Chat system prompt (capability-aware fallback):")
     p = prompts.build_system_prompt(
         assistant_name="Luna",
         personality="friendly",
@@ -122,14 +122,56 @@ def test_prompt() -> None:
     check("image note is conditional", "unless an image is actually involved" in p)
 
 
+# --- 3. HTTP layer (in-process ASGI, no port/process, non-destructive) --------
+def test_http() -> None:
+    print("\n3. HTTP layer (in-process ASGI via TestClient):")
+    try:
+        from fastapi.testclient import TestClient
+
+        from luna.server.app import create_app
+    except Exception as exc:  # import/boot failure shouldn't crash the whole run
+        check("TestClient + app import", False, str(exc)[:90])
+        return
+
+    with TestClient(create_app()) as client:  # 'with' runs the lifespan (init_db)
+        r = client.get("/api/health")
+        check("GET /api/health -> 200", r.status_code == 200, f"status {r.status_code}")
+        if r.status_code == 200:
+            check("health reports ollama status", "ollama" in r.json(), str(r.json())[:80])
+
+        # Read-only list endpoints — no Ollama, no data mutation.
+        for path in (
+            "/api/reminders", "/api/todos", "/api/notes", "/api/settings",
+            "/api/permissions", "/api/conversations", "/api/memories", "/api/activity",
+        ):
+            r = client.get(path)
+            check(f"GET {path} -> 200", r.status_code == 200, f"status {r.status_code}")
+
+        # Chat SSE contract: 'meta' opens and 'done' closes the stream regardless
+        # of Ollama (a down model yields an 'error' event then 'done', not a hang).
+        try:
+            events: list[str] = []
+            with client.stream("POST", "/api/chat", json={"message": "hello"}) as resp:
+                status = resp.status_code
+                for line in resp.iter_lines():
+                    if line.startswith("event:"):
+                        events.append(line[len("event:"):].strip())
+            check("POST /api/chat -> 200 (SSE)", status == 200, f"status {status}")
+            check("chat stream opens with 'meta'", "meta" in events, f"events={events[:6]}")
+            check("chat stream ends with 'done'", "done" in events, f"tail={events[-4:]}")
+        except Exception as exc:
+            check("POST /api/chat SSE", False, str(exc)[:100])
+
+
 def main() -> None:
     print("=== Luna smoke test ===\n")
     test_fastpaths()
     test_prompt()
+    test_http()
     try:
         asyncio.run(test_llm(_active_model()))
     except (OllamaError, OSError) as exc:
-        print(f"\n2. Live classification: SKIPPED (Ollama unavailable: {exc})")
+        print(f"\n4. Live classification: SKIPPED (Ollama unavailable: {exc})")
 
     print(f"\n{'-' * 32}\n{_PASS} passed, {_FAIL} failed")
     sys.exit(1 if _FAIL else 0)
