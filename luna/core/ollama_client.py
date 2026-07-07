@@ -57,14 +57,23 @@ async def chat_stream(
     num_ctx: int = NUM_CTX,
     keep_alive: str = KEEP_ALIVE,
     json_format: bool = False,
+    temperature: float | None = None,
 ) -> AsyncIterator[str]:
-    """Yield assistant text chunks as they stream from ``/api/chat``."""
+    """Yield assistant text chunks as they stream from ``/api/chat``.
+
+    ``temperature`` defaults to the model's own default (varied, good for
+    chat). Pass ``0.0`` for deterministic tasks like intent classification so
+    the same input always classifies the same way.
+    """
+    options: dict[str, Any] = {"num_ctx": num_ctx}
+    if temperature is not None:
+        options["temperature"] = temperature
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
         "stream": True,
         "keep_alive": keep_alive,
-        "options": {"num_ctx": num_ctx},
+        "options": options,
     }
     if json_format:
         payload["format"] = "json"
@@ -103,6 +112,7 @@ async def chat_once(
     num_ctx: int = NUM_CTX,
     keep_alive: str = KEEP_ALIVE,
     json_format: bool = False,
+    temperature: float | None = None,
 ) -> str:
     """Non-streaming convenience wrapper for short internal calls (router
     classification, fact extraction, action-result phrasing)."""
@@ -113,6 +123,7 @@ async def chat_once(
         num_ctx=num_ctx,
         keep_alive=keep_alive,
         json_format=json_format,
+        temperature=temperature,
     ):
         chunks.append(chunk)
     return "".join(chunks)

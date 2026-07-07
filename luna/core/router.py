@@ -84,6 +84,17 @@ _FAST_PATHS: list[tuple[re.Pattern[str], str, Callable[[re.Match[str]], dict[str
         _group1_as("text"),
     ),
     (
+        # "set/create/add/make/schedule a reminder [to|for|about] X" — also matches
+        # the bare "set a reminder" (empty text), so it proposes rather than silently
+        # falling through to chat.
+        re.compile(
+            r"^\s*(?:set|create|add|make|schedule)\s+(?:up\s+)?(?:an?\s+|the\s+)?remind(?:er)?s?\b\s*(?:to|for|about|that|:)?\s*(.*)$",
+            re.IGNORECASE,
+        ),
+        "set_reminder",
+        _group1_as("text"),
+    ),
+    (
         re.compile(r"^\s*(?:draft|write|compose)\s+(?:an?\s+)?email\b\s*(.*)$", re.IGNORECASE),
         "draft_email",
         lambda m: {"context": m.group(1).strip()},
@@ -171,8 +182,14 @@ async def classify(
         return fast
 
     try:
+        # temperature=0 → deterministic classification. Without it the 3B model
+        # samples randomly and the SAME command routes to an action one run and
+        # to plain "chat" the next, so actions fire only intermittently.
         raw = await chat_once(
-            prompts.build_router_prompt(message), model=model, json_format=True
+            prompts.build_router_prompt(message),
+            model=model,
+            json_format=True,
+            temperature=0.0,
         )
         data = json.loads(raw)
         intent = data.get("intent") if isinstance(data, dict) else None
