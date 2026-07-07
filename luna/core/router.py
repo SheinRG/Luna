@@ -94,16 +94,56 @@ _FAST_PATHS: list[tuple[re.Pattern[str], str, Callable[[re.Match[str]], dict[str
         _group1_as("text"),
     ),
     (
-        re.compile(r"^\s*(?:find|search)\s+(?:for\s+)?my\s+(.+)$", re.IGNORECASE),
-        "search_files",
-        _group1_as("query"),
-    ),
-    (
         re.compile(r"^\s*(?:open|launch)\s+(.+)$", re.IGNORECASE),
         "open_app",
         _group1_as("app_name"),
     ),
 ]
+
+
+# --- Local file search fast-path ---------------------------------------------------
+# "find/search/look for/where is/locate X" all mean: search this computer for X.
+# We strip filler and "kind" words ("the movie", "a file called") so the query is
+# the meaningful term — search matches file *names*, so extra words only exclude hits.
+
+_SEARCH_STOPWORDS = {
+    "the", "a", "an", "my", "your", "our", "some", "any", "all", "that", "this",
+    "these", "those", "for", "of", "to", "in", "on", "called", "named", "titled",
+    "file", "files", "folder", "folders", "document", "documents", "doc", "docs",
+    "movie", "movies", "film", "films", "song", "songs", "music", "photo", "photos",
+    "picture", "pictures", "pic", "pics", "image", "images", "video", "videos",
+    "clip", "clips",
+}
+# Leading words that mean the message is a question, not a file search.
+_SEARCH_QUESTION_WORDS = {"what", "when", "who", "whom", "why", "how", "which", "whether"}
+# If the user is clearly asking about the internet, don't pretend to disk-search it.
+_WEB_HINT = re.compile(r"\b(web|online|internet|google|youtube|browser|wikipedia|imdb)\b", re.IGNORECASE)
+_SEARCH_TRIGGER = re.compile(
+    r"^\s*(?:find|search|look|locate|where)\b(?:\s+(?:is|are|'?s|for|up|out|me))*\s+(.+?)\s*\??$",
+    re.IGNORECASE,
+)
+
+
+def _clean_search_query(raw: str) -> str:
+    tokens = [t.strip(".,!?;:\"'") for t in raw.lower().split()]
+    kept = [t for t in tokens if t and t not in _SEARCH_STOPWORDS]
+    return " ".join(kept).strip() or raw.strip()
+
+
+def _match_search(stripped: str) -> RouterResult | None:
+    if _WEB_HINT.search(stripped):
+        return None
+    m = _SEARCH_TRIGGER.match(stripped)
+    if m is None:
+        return None
+    raw = m.group(1).strip()
+    first = raw.lower().split()[0] if raw.split() else ""
+    if first in _SEARCH_QUESTION_WORDS:
+        return None  # "find out what …", "search how to …" → conversational
+    query = _clean_search_query(raw)
+    if not query:
+        return None
+    return RouterResult(intent="search_files", args={"query": query}, confidence=1.0, source="regex")
 
 
 def match_fast_path(message: str) -> RouterResult | None:
@@ -114,7 +154,7 @@ def match_fast_path(message: str) -> RouterResult | None:
         m = pattern.match(stripped) or pattern.search(stripped)
         if m:
             return RouterResult(intent=intent, args=build_args(m), confidence=1.0, source="regex")
-    return None
+    return _match_search(stripped)
 
 
 async def classify(
