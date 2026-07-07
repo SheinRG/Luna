@@ -124,10 +124,19 @@ export function render(container) {
   });
 }
 
+/** Embedding models (e.g. nomic-embed-text) can't do chat — selecting one
+ *  breaks every reply with "does not support chat". Never offer them here. */
+function isChatModel(name) {
+  return !/embed|embedding/i.test(name);
+}
+
 /** Shared with Settings: renders model-picker buttons from /api/health. */
 export function renderModelOptions(listEl, selected, onSelect) {
   listEl.innerHTML = '';
-  const models = state.health?.models || [];
+  const models = (state.health?.models || []).filter((m) => {
+    const name = typeof m === 'string' ? m : m?.name || m?.model || String(m);
+    return isChatModel(name);
+  });
 
   if (!models.length) {
     listEl.appendChild(el('div', { class: 'model-empty-note', html:

@@ -19,7 +19,7 @@ from luna.core.ollama_client import OllamaError, chat_once
 TEXT_EXTENSIONS = {".txt", ".md", ".markdown", ".log", ".csv", ".json", ".py", ".js"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic", ".svg"}
 
-_CHUNK_CHARS = 6_000
+_CHUNK_CHARS = 8_000  # ~2k tokens/chunk — fits 4096 num_ctx with room for the reply
 _MAX_CHUNKS = 8  # cap LLM cost for huge files
 
 

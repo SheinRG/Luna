@@ -72,7 +72,12 @@ def _get_settings() -> dict[str, str]:
 
 
 def _model(settings: dict[str, str]) -> str:
-    return settings.get("model") or DEFAULT_MODEL
+    model = settings.get("model") or DEFAULT_MODEL
+    # Embedding models (e.g. nomic-embed-text) can't do chat. If one was somehow
+    # selected, fall back to the default rather than failing every reply.
+    if "embed" in model.lower():
+        return DEFAULT_MODEL
+    return model
 
 
 # --- Persistence helpers ----------------------------------------------------------
@@ -387,6 +392,17 @@ async def _run_action_flow(
             approved = pending.event.is_set() and pending.approved
             if approved and pending.remember_permission:
                 grant_permission(spec.permission_category)
+        except BaseException:
+            # Client disconnected (tab closed, navigated away, task cancelled)
+            # while a decision was pending. Without this, the exchange leaves
+            # no trace at all — reopening the conversation shows nothing after
+            # the user's message, as if it never happened. Leave a record.
+            if not sink:
+                sink.append(
+                    "That needed your approval and we lost the connection before "
+                    "you could respond, so I didn't do anything. Ask again anytime."
+                )
+            raise
         finally:
             _pending_actions.pop(action_id, None)
 
@@ -405,6 +421,15 @@ async def _run_action_flow(
         sink.append(reply)
         yield ("token", {"text": reply})
         return
+
+    # Summarizing a document is several sequential CPU LLM calls (map-reduce)
+    # and can take a minute or two with no output. Emit an immediate note so the
+    # user sees progress instead of dead silence — and so something is persisted
+    # if they navigate away before the summary finishes.
+    if intent == "summarize_document" and attachment_ids:
+        intro = "Reading your document and summarizing it locally — this can take a minute on CPU…\n\n"
+        sink.append(intro)
+        yield ("token", {"text": intro})
 
     result = await _execute_action(intent, args, attachment_ids, model)
     status = result.get("status", "error")
