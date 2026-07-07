@@ -54,7 +54,10 @@ _FAST_PATHS: list[tuple[re.Pattern[str], str, Callable[[re.Match[str]], dict[str
         _undo_organize,
     ),
     (
-        re.compile(r"\borganiz(e|ing)\b.{0,15}\bdownloads?\b", re.IGNORECASE),
+        re.compile(
+            r"\b(?:organiz(?:e|ing)|clean(?:\s*up)?|sort|tidy(?:\s*up)?|declutter)\b.{0,15}\bdownloads?\b",
+            re.IGNORECASE,
+        ),
         "organize_downloads",
         _empty_args,
     ),
@@ -64,17 +67,31 @@ _FAST_PATHS: list[tuple[re.Pattern[str], str, Callable[[re.Match[str]], dict[str
         _group1_as("text"),
     ),
     (
+        # "jot down X", "write down X", "note down X", "save/make a note [about] X"
+        re.compile(
+            r"^\s*(?:jot(?:\s+down)?|write\s+down|note\s+down|(?:save|make|take)\s+a\s+note(?:\s+(?:about|that|of|saying))?)\s*[:\-]?\s*(.+)$",
+            re.IGNORECASE,
+        ),
+        "create_note",
+        _group1_as("text"),
+    ),
+    (
         re.compile(r"^\s*note\s+(.+)$", re.IGNORECASE),
         "create_note",
         _group1_as("text"),
     ),
     (
-        re.compile(r"^\s*add\s+(.+?)\s+to\s+(?:my\s+)?to-?do(?:\s+list)?\s*$", re.IGNORECASE),
+        re.compile(r"^\s*add\s+(.+?)\s+to\s+(?:my\s+)?(?:to-?do(?:\s+list)?|list)\s*$", re.IGNORECASE),
         "create_todo",
         _todo_from_add_to,
     ),
     (
-        re.compile(r"^\s*(?:add|create)\s+(?:a\s+)?to-?do(?:\s+list)?\s*[:\-]?\s*(.+)$", re.IGNORECASE),
+        re.compile(r"^\s*(?:add|create|make|new)\s+(?:a\s+)?to-?do(?:\s+list)?\s*[:\-]?\s*(.+)$", re.IGNORECASE),
+        "create_todo",
+        _group1_as("item"),
+    ),
+    (
+        re.compile(r"^\s*to-?do\s*[:\-]\s*(.+)$", re.IGNORECASE),
         "create_todo",
         _group1_as("item"),
     ),
@@ -105,7 +122,7 @@ _FAST_PATHS: list[tuple[re.Pattern[str], str, Callable[[re.Match[str]], dict[str
         _group1_as("text"),
     ),
     (
-        re.compile(r"^\s*(?:open|launch)\s+(.+)$", re.IGNORECASE),
+        re.compile(r"^\s*(?:open(?:\s+up)?|launch|start)\s+(.+)$", re.IGNORECASE),
         "open_app",
         _group1_as("app_name"),
     ),
@@ -173,7 +190,9 @@ async def classify(
 ) -> RouterResult:
     """Classify a user message into an intent. Never raises."""
     if has_attachments and re.search(
-        r"\b(summar(y|ize)|what'?s in|read)\b", message, re.IGNORECASE
+        r"\b(summar(?:y|ize|ise)|tl;?dr|sum up|the gist|key points|what'?s in|go through|read)\b",
+        message,
+        re.IGNORECASE,
     ):
         return RouterResult(intent="summarize_document", args={}, confidence=1.0, source="regex")
 
