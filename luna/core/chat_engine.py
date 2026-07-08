@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 from luna.config import ACTION_CONFIRM_TIMEOUT_SECONDS, DEFAULT_MODEL
-from luna.actions import apps, documents, files, productivity
+from luna.actions import apps, documents, files, productivity, system
 from luna.actions.registry import (
     get_action_spec,
     grant_permission,
@@ -185,6 +185,8 @@ def _build_preview(intent: str, args: dict[str, Any]) -> tuple[str, dict[str, An
         return "Read the attached document and summarize it", args
     if intent == "remember":
         return f"Remember: \"{args.get('text', '')}\"", args
+    if intent in ("system_control", "system_power"):
+        return system.preview(str(args.get("command", ""))), args
     return "Run this action", args
 
 
@@ -218,6 +220,8 @@ async def _execute_action(
         if not attachment_ids:
             return {"status": "error", "detail": "No document attached — upload a file first."}
         return await documents.summarize_document(attachment_ids[-1], model=model)
+    if intent in ("system_control", "system_power"):
+        return system.run(str(args.get("command", "")))
     return {"status": "error", "detail": f"Unknown action: {intent}"}
 
 

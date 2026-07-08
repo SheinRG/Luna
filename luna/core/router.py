@@ -46,6 +46,13 @@ def _todo_from_add_to(m: re.Match[str]) -> dict[str, Any]:
     return {"item": m.group(1).strip()}
 
 
+def _const(**kwargs: Any) -> Callable[[re.Match[str]], dict[str, Any]]:
+    def build(_m: re.Match[str]) -> dict[str, Any]:
+        return dict(kwargs)
+
+    return build
+
+
 # Ordered most-specific-first: each entry is (compiled pattern, intent, arg builder).
 _FAST_PATHS: list[tuple[re.Pattern[str], str, Callable[[re.Match[str]], dict[str, Any]]]] = [
     (
@@ -120,6 +127,57 @@ _FAST_PATHS: list[tuple[re.Pattern[str], str, Callable[[re.Match[str]], dict[str
         re.compile(r"^\s*remember\s+(?:that\s+)?(.+)$", re.IGNORECASE),
         "remember",
         _group1_as("text"),
+    ),
+    # --- System control (whitelisted commands; see actions/system.py) ---------
+    (
+        re.compile(r"^\s*lock\s+(?:my\s+|the\s+)?(?:pc|computer|laptop|screen|windows)\s*$", re.IGNORECASE),
+        "system_control",
+        _const(command="lock"),
+    ),
+    (
+        re.compile(r"^\s*(?:take|grab|capture)?\s*(?:a\s+)?screen\s?shot\b", re.IGNORECASE),
+        "system_control",
+        _const(command="screenshot"),
+    ),
+    (
+        re.compile(r"^\s*(?:un)?mute\b(?:\s+(?:the\s+)?(?:pc|sound|audio|volume|speakers?))?\s*$", re.IGNORECASE),
+        "system_control",
+        _const(command="mute"),
+    ),
+    (
+        re.compile(r"\b(?:volume\s+up|turn\s+(?:up|it)\s+(?:the\s+volume|up)|(?:increase|raise)\s+(?:the\s+)?volume|louder)\b", re.IGNORECASE),
+        "system_control",
+        _const(command="volume_up"),
+    ),
+    (
+        re.compile(r"\b(?:volume\s+down|turn\s+down\s+the\s+volume|(?:decrease|lower|reduce)\s+(?:the\s+)?volume|quieter)\b", re.IGNORECASE),
+        "system_control",
+        _const(command="volume_down"),
+    ),
+    (
+        re.compile(r"\b(?:(?:increase|raise|turn\s+up)\s+(?:the\s+)?(?:screen\s+)?brightness|brightness\s+up|brighten\s+(?:the\s+)?screen)\b", re.IGNORECASE),
+        "system_control",
+        _const(command="brightness_up"),
+    ),
+    (
+        re.compile(r"\b(?:(?:decrease|lower|reduce|turn\s+down)\s+(?:the\s+)?(?:screen\s+)?brightness|brightness\s+down|dim\s+(?:the\s+)?screen)\b", re.IGNORECASE),
+        "system_control",
+        _const(command="brightness_down"),
+    ),
+    (
+        re.compile(r"\b(?:empty|clear|clean(?:\s+out)?)\b.{0,12}\brecycle\s*bin\b", re.IGNORECASE),
+        "system_power",
+        _const(command="empty_recycle_bin"),
+    ),
+    (
+        re.compile(r"^\s*(?:shut\s*down|turn\s+off|power\s+off)\s+(?:my\s+|the\s+|this\s+)?(?:pc|computer|laptop|system|windows)\s*$", re.IGNORECASE),
+        "system_power",
+        _const(command="shutdown"),
+    ),
+    (
+        re.compile(r"^\s*(?:restart|reboot)\s*(?:my\s+|the\s+|this\s+)?(?:pc|computer|laptop|system|windows)?\s*$", re.IGNORECASE),
+        "system_power",
+        _const(command="restart"),
     ),
     (
         re.compile(r"^\s*(?:open(?:\s+up)?|launch|start)\s+(.+)$", re.IGNORECASE),

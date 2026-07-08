@@ -34,6 +34,11 @@ _REGISTRY: dict[str, ActionSpec] = {
         ActionSpec("create_todo", "Add a to-do", "files", read_only=False, destructive=False),
         ActionSpec("organize_downloads", "Organize your Downloads folder", "files", read_only=False, destructive=True),
         ActionSpec("remember", "Remember something about you", "files", read_only=False, destructive=False),
+        # System control reuses the "apps" category (schema CHECK constraint fixes
+        # the category list; a migration isn't worth it). Both intents always show
+        # a card anyway: non-read-only forces one, and system_power is destructive.
+        ActionSpec("system_control", "Control your PC", "apps", read_only=False, destructive=False),
+        ActionSpec("system_power", "Power or cleanup action", "apps", read_only=False, destructive=True),
     ]
 }
 

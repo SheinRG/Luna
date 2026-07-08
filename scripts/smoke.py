@@ -61,6 +61,17 @@ _FASTPATH_CASES: list[tuple[str, str | None]] = [
     ("what is the capital of france", None),   # conversational -> chat
     ("search the web for cats", None),         # web intent -> chat, not disk
     ("hello there", None),
+    # System control (whitelisted commands)
+    ("lock my pc", "system_control"),
+    ("take a screenshot", "system_control"),
+    ("mute", "system_control"),
+    ("volume up", "system_control"),
+    ("turn down the volume", "system_control"),
+    ("increase brightness", "system_control"),
+    ("dim the screen", "system_control"),
+    ("empty the recycle bin", "system_power"),
+    ("shut down my pc", "system_power"),
+    ("restart my laptop", "system_power"),
 ]
 
 
@@ -70,6 +81,39 @@ def test_fastpaths() -> None:
         r = router.match_fast_path(msg)
         got = r.intent if r else None
         check(f"{msg!r} -> {expected}", got == expected, f"got {got}")
+
+
+# --- 1b. App/settings name resolution (preview only — launches nothing) --------
+_RESOLVE_CASES: list[tuple[str, str | None, str]] = [  # (name, kind, target substring)
+    ("settings", "uri", "ms-settings:"),
+    ("wifi settings", "uri", "ms-settings:network-wifi"),   # used to open WSL Settings!
+    ("wifi", "uri", "ms-settings:network-wifi"),
+    ("bluetooth settings", "uri", "ms-settings:bluetooth"),
+    ("windows update", "uri", "ms-settings:windowsupdate"),
+    ("task manager", "command", "taskmgr"),
+    ("control panel", "command", "control"),
+]
+
+
+def test_resolution() -> None:
+    from luna.actions import apps, system
+
+    print("\n1b. App/settings resolution (preview only):")
+    for name, kind, target_sub in _RESOLVE_CASES:
+        resolved = apps.resolve_app(name)
+        ok = resolved is not None and resolved[0] == kind and target_sub in resolved[1]
+        check(f"{name!r} -> {kind}:{target_sub}", ok, f"got {resolved}")
+    # The original bug, pinned forever: "wifi settings" must never resolve to WSL.
+    resolved = apps.resolve_app("wifi settings")
+    check(
+        "'wifi settings' does NOT resolve to WSL",
+        resolved is not None and "wsl" not in resolved[2].lower(),
+        f"got {resolved}",
+    )
+    # Every whitelisted system command has a human-readable preview.
+    for cmd in system.SAFE_COMMAND_NAMES + system.POWER_COMMAND_NAMES:
+        check(f"system preview for {cmd!r}", "Unknown" not in system.preview(cmd))
+    check("unknown system command rejected", system.run("format_c_drive")["status"] == "error")
 
 
 # --- 2. Live LLM classification ------------------------------------------------
@@ -166,6 +210,7 @@ def test_http() -> None:
 def main() -> None:
     print("=== Luna smoke test ===\n")
     test_fastpaths()
+    test_resolution()
     test_prompt()
     test_http()
     try:

@@ -33,6 +33,8 @@ ROUTER_INTENTS: list[str] = [
     "create_todo",
     "organize_downloads",
     "remember",
+    "system_control",
+    "system_power",
 ]
 
 
@@ -52,8 +54,10 @@ def build_system_prompt(
         f"Tone: {style}. {length}",
         # Capability awareness: turn dead-ends into a helpful offer of what Luna CAN do.
         "Beyond chatting, you can take real actions on this PC when the user asks: search their "
-        "files, open apps, set reminders, take notes, add to-dos, organize the Downloads folder, "
-        "and summarize documents they attach. The app performs these automatically when asked — "
+        "files, open apps and Windows settings pages, set reminders, take notes, add to-dos, "
+        "organize the Downloads folder, summarize documents they attach, and control the PC "
+        "(lock it, take a screenshot, adjust volume/brightness, shut down or restart, empty the "
+        "Recycle Bin). The app performs these automatically when asked — "
         "you do NOT run them or claim to have run them yourself in a normal reply. If the user "
         "wants something outside these (searching the web, playing or streaming media, anything "
         "that needs the internet), don't just brush them off — say plainly that you're offline "
@@ -78,7 +82,10 @@ def build_router_prompt(message: str) -> list[dict[str, str]]:
         f"Respond with ONLY compact JSON, no prose, no markdown fences, schema: "
         f'{{"intent": one of {schema}, "args": {{}}, "confidence": number 0-1}}. '
         "Use \"chat\" for anything conversational, a question, or unclear. "
-        "args may include things like app_name, query, text, due, list_name."
+        "args may include things like app_name, query, text, due, list_name. "
+        "For system_control args.command is one of lock|screenshot|mute|volume_up|"
+        "volume_down|brightness_up|brightness_down; for system_power it is "
+        "shutdown|restart|empty_recycle_bin."
     )
     return [
         {"role": "system", "content": system},
