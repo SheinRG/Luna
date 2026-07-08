@@ -110,6 +110,19 @@ def test_resolution() -> None:
         resolved is not None and "wsl" not in resolved[2].lower(),
         f"got {resolved}",
     )
+    # Store/UWP visibility (the WhatsApp bug, generalized): Get-StartApps must
+    # surface a healthy index, and any app it names must resolve and be
+    # launchable via an AUMID or better.
+    store = apps.scan_start_apps()
+    check("Get-StartApps index has apps", len(store) >= 5, f"{len(store)} entries")
+    if store:
+        sample_name = store[0][0]
+        resolved = apps.resolve_app(sample_name)
+        check(
+            f"store app {sample_name!r} resolves",
+            resolved is not None,
+            f"got {resolved}",
+        )
     # Every whitelisted system command has a human-readable preview.
     for cmd in system.SAFE_COMMAND_NAMES + system.POWER_COMMAND_NAMES:
         check(f"system preview for {cmd!r}", "Unknown" not in system.preview(cmd))
